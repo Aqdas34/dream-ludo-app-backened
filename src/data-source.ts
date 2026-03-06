@@ -1,0 +1,43 @@
+import { DataSource } from "typeorm";
+import { User } from "./entities/User.js";
+import { RewardHistory } from "./entities/RewardHistory.js";
+import { Match } from "./entities/Match.js";
+import { UserProfile } from "./entities/UserProfile.js";
+import { GemTransaction } from "./entities/GemTransaction.js";
+import { Purchase } from "./entities/Purchase.js";
+import { DailyReward } from "./entities/DailyReward.js";
+import { Achievement } from "./entities/Achievement.js";
+import { UserAchievement } from "./entities/UserAchievement.js";
+import { GameReward } from "./entities/GameReward.js";
+import { GemPackage } from "./entities/GemPackage.js";
+import { GameHistory } from "./entities/GameHistory.js";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+export const AppDataSource = new DataSource({
+    type: "postgres",
+    host: process.env.DB_HOST || "localhost",
+    port: parseInt(process.env.DB_PORT || "5432"),
+    username: process.env.DB_USER || "postgres",
+    password: process.env.DB_PASSWORD || "password",
+    database: process.env.DB_NAME || "dream_ludo",
+    synchronize: true, // Auto-create tables (use migrations in production)
+    logging: false,
+    entities: [
+        User,
+        RewardHistory,
+        Match,
+        UserProfile,
+        GemTransaction,
+        Purchase,
+        DailyReward,
+        Achievement,
+        UserAchievement,
+        GameReward,
+        GemPackage,
+        GameHistory
+    ],
+    migrations: [],
+    subscribers: [],
+});
