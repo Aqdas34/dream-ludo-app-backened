@@ -12,14 +12,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
     // ── Get Public Rooms ──────────────────────────────────────────
     socket.on("getPublicRooms", async () => {
         try {
-            const user = (socket as any).user;
             let rooms = await _fetchPublicRooms();
-
-            // Islamic Restrictions: Filter rooms by user gender if they are logged in
-            if (user && user.gender) {
-                rooms = rooms.filter(r => !r.requiredGender || r.requiredGender === user.gender);
-            }
-
             socket.join("public_lobby"); // Join for live updates
             socket.emit("publicRoomsList", rooms);
         } catch (error) {
@@ -61,7 +54,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
     };
 
     // ── Create Room ───────────────────────────────────────────────
-    socket.on("createRoom", async (data: { roomId?: string, userId?: string, username?: string, isPrivate?: boolean, playerCount: number, requiredGender?: string }) => {
+    socket.on("createRoom", async (data: { roomId?: string, userId?: string, username?: string, isPrivate?: boolean, playerCount: number, clientGender?: string }) => {
         try {
             const roomId = data.roomId || Math.floor(100000 + Math.random() * 900000).toString();
             const user = (socket as any).user;
@@ -70,8 +63,8 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             (socket as any).roomId = roomId;
             const username = user?.display_name || user?.username || data.username || `Guest_${userId.toString().substring(0, 5)}`;
 
-            // Host gender as requirement if provided or from profile
-            const hostGender = data.requiredGender || user?.gender;
+            // Islamic Restrictions: Always enforce room to host's gender
+            const hostGender = user?.gender || data.clientGender; // 'MALE' or 'FEMALE'
 
             // Check if room already exists to prevent overwriting joined players
             const existingRoomData = await redis.get(`room:${roomId}`);
@@ -131,11 +124,12 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
     });
 
     // ── Join Room ─────────────────────────────────────────────────
-    socket.on("joinRoom", async (data: { roomId: string, userId?: string, username?: string } | string) => {
+    socket.on("joinRoom", async (data: { roomId: string, userId?: string, username?: string, clientGender?: string } | string) => {
         try {
             const roomId = typeof data === 'string' ? data : data.roomId;
             const clientUserId = typeof data === 'string' ? null : data.userId;
             const clientUsername = typeof data === 'string' ? null : data.username;
+            const clientGenderInput = typeof data === 'string' ? null : data.clientGender;
 
             const roomData = await redis.get(`room:${roomId}`);
             if (!roomData) return socket.emit("error", "Room not found");
@@ -148,8 +142,9 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             const username = user?.display_name || user?.username || clientUsername || `Guest_${userId.toString().substring(0, 5)}`;
 
             // GENDER CHECK - Same gender only requirement
-            if (roomState.requiredGender && (!user || user.gender !== roomState.requiredGender)) {
-                console.log(`🚫 Join rejected: Gender mismatch for room ${roomId}. Need ${roomState.requiredGender}, player is ${user?.gender}`);
+            const resolvedGender = user?.gender || clientGenderInput;
+            if (roomState.requiredGender && (!resolvedGender || resolvedGender.toUpperCase() !== roomState.requiredGender.toUpperCase())) {
+                console.log(`🚫 Join rejected: Gender mismatch for room ${roomId}. Need ${roomState.requiredGender}, player is ${resolvedGender}`);
                 return socket.emit("error", `This room is for ${roomState.requiredGender} players only.`);
             }
 
@@ -216,6 +211,15 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
 
         await redis.set(`room:${data.roomId}`, JSON.stringify(roomState), { EX: 3600 });
         io.to(data.roomId).emit("newMessage", chatMsg);
+    });
+
+    // ── WebRTC Signaling ──────────────────────────────────────────
+    socket.on("webrtcSignal", (data: { roomId: string, targetUserId?: string, type: string, payload: any }) => {
+        // Broadcasts signal to everyone in the room except sender
+        socket.to(data.roomId).emit("webrtcSignal", {
+            ...data,
+            senderUserId: (socket as any).userId
+        });
     });
 
     // ── Roll Dice ─────────────────────────────────────────────────
