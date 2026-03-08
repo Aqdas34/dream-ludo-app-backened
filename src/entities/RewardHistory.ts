@@ -5,7 +5,8 @@ export enum RewardType {
     GAME_WIN = "GAME_WIN",
     GAME_PARTICIPATION = "GAME_PARTICIPATION",
     REFERRAL = "REFERRAL",
-    REDEEM = "REDEEM"
+    REDEEM = "REDEEM",
+    PURCHASE = "PURCHASE"
 }
 
 @Entity("reward_histories")

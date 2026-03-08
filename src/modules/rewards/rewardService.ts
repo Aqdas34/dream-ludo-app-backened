@@ -3,6 +3,18 @@ import { User } from "../../entities/User.js";
 import { RewardHistory, RewardType } from "../../entities/RewardHistory.js";
 
 export class RewardService {
+    // ── Unified Reward Utility ────────────────────────────────────
+    static async addReward(manager: any, user: User, amount: number, type: RewardType, description: string) {
+        user.gems = (user.gems || 0) + amount;
+        await manager.save(user);
+
+        const history = new RewardHistory();
+        history.user = user;
+        history.amount = amount;
+        history.type = type;
+        history.description = description;
+        await manager.save(history);
+    }
 
     // ── Update Rewards After Game ─────────────────────────────────
     static async updateGameRewards(userId: number, isWinner: boolean) {
@@ -11,81 +23,77 @@ export class RewardService {
             if (!user) throw new Error("User not found");
 
             const balanceReward = isWinner ? 100 : 20;
-            const gemReward = isWinner ? 10 : 2; // Winners get 10 gems, participation 2
+            const gemReward = isWinner ? 10 : 2;
+            const xpReward = isWinner ? 200 : 50;
 
             user.bonusBal = Number(user.bonusBal) + balanceReward;
-            user.gems = (user.gems || 0) + gemReward;
             user.totalGames += 1;
             if (isWinner) user.totalWins += 1;
 
+            // Level / XP logic
+            user.experience += xpReward;
+            user.level = Math.floor(user.experience / 1000) + 1;
+
             await manager.save(user);
 
-            const history = new RewardHistory();
-            history.user = user;
-            history.amount = gemReward;
-            history.type = isWinner ? RewardType.GAME_WIN : RewardType.GAME_PARTICIPATION;
-            history.description = isWinner ? `Won match - +${gemReward} Gems` : `Match participation - +${gemReward} Gems`;
-            await manager.save(history);
+            // Add gems and audit history
+            await this.addReward(manager, user, gemReward,
+                isWinner ? RewardType.GAME_WIN : RewardType.GAME_PARTICIPATION,
+                isWinner ? `Game Victory - Level ${user.level}` : `Participation - Level ${user.level}`
+            );
 
-            // ── Check Achievements ──────────────────────────────────
-            await this.checkAchievements(manager, user);
+            // Milestone: First Win
+            if (user.totalWins === 1) {
+                await this.addReward(manager, user, 50, RewardType.GAME_WIN, "Achievement: First Victory! 🏆");
+            }
 
-            return { gems: user.gems, bonusBal: user.bonusBal };
+            return { gems: user.gems, bonusBal: user.bonusBal, level: user.level, experience: user.experience };
         });
     }
 
-    private static async checkAchievements(manager: any, user: User) {
-        // Milestone 1: First Win
-        if (user.totalWins === 1) {
-            user.gems += 20; // 20 diamonds for 1st win!
-            await manager.save(user);
-            await manager.save(RewardHistory, {
-                user: user, amount: 20, type: RewardType.GAME_WIN,
-                description: "Achievement Unlocked: Your First Victory! 🎉"
-            });
-        }
-
-        // Milestone 2: 10 Games played
-        if (user.totalGames === 10) {
-            user.gems += 50;
-            await manager.save(user);
-            await manager.save(RewardHistory, {
-                user: user, amount: 50, type: RewardType.GAME_PARTICIPATION,
-                description: "Achievement: Ludo Veteran (10 Games) 🎮"
-            });
-        }
-    }
-
-    // ── Claim Daily Reward ────────────────────────────────────────
+    // ── Claim Daily Reward (With Streak) ─────────────────────────
     static async claimDailyReward(userId: number) {
         return await AppDataSource.transaction(async (manager) => {
             const user = await manager.findOneBy(User, { id: userId });
             if (!user) throw new Error("User not found");
 
             const now = new Date();
+            const today = now.toISOString().split('T')[0];
+
             if (user.lastDailyClaim) {
                 const lastClaim = new Date(user.lastDailyClaim);
                 const lastClaimDay = lastClaim.toISOString().split('T')[0];
-                const today = now.toISOString().split('T')[0];
-
                 if (lastClaimDay === today) {
                     throw new Error("Already claimed today");
                 }
+
+                // Check streak continuity (yesterday)
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayDay = yesterday.toISOString().split('T')[0];
+
+                if (lastClaimDay === yesterdayDay) {
+                    user.streakDays += 1;
+                } else {
+                    user.streakDays = 1;
+                }
+            } else {
+                user.streakDays = 1;
             }
 
-            const gemAmount = 10; // 10 Free Gems daily
-            user.gems = (user.gems || 0) + gemAmount;
+            // Streak Multiplier: Bonus gems for longer streaks
+            const baseGems = 10;
+            const streakBonus = Math.min(user.streakDays - 1, 10) * 5; // Max 50 bonus
+            const totalGems = baseGems + streakBonus;
+
             user.lastDailyClaim = now;
             await manager.save(user);
 
-            const history = new RewardHistory();
-            history.user = user;
-            history.amount = gemAmount;
-            history.type = RewardType.DAILY_LOGIN;
-            history.description = "Daily Login Reward - +10 Gems";
-            await manager.save(history);
+            await this.addReward(manager, user, totalGems, RewardType.DAILY_LOGIN,
+                `Daily Login (Day ${user.streakDays}) - streak bonus: +${streakBonus}`
+            );
 
-            return user.gems;
+            return { gems: user.gems, streak: user.streakDays, awarded: totalGems };
         });
     }
 
@@ -98,17 +106,13 @@ export class RewardService {
             if (referrer) {
                 referrer.bonusBal = Number(referrer.bonusBal) + 200;
                 await manager.save(referrer);
-                const h1 = new RewardHistory();
-                h1.user = referrer; h1.amount = 200; h1.type = RewardType.REFERRAL;
-                await manager.save(h1);
+                await this.addReward(manager, referrer, 5, RewardType.REFERRAL, "Referral Bonus: Invited Friend");
             }
 
             if (newUser) {
                 newUser.bonusBal = Number(newUser.bonusBal) + 200;
                 await manager.save(newUser);
-                const h2 = new RewardHistory();
-                h2.user = newUser; h2.amount = 200; h2.type = RewardType.REFERRAL;
-                await manager.save(h2);
+                await this.addReward(manager, newUser, 5, RewardType.REFERRAL, "Referral Bonus: Joined via Code");
             }
         });
     }

@@ -3,6 +3,8 @@ import { AppDataSource } from "../../data-source.js";
 import { Match } from "../../entities/Match.js";
 
 import { GameHistoryService } from "../game/gameHistoryService.js";
+import { Notification } from "../../entities/Notification.js";
+import { IsNull } from "typeorm";
 
 export class MatchController {
     static async getUpcoming(req: Request, res: Response) {
@@ -130,5 +132,19 @@ export class MatchController {
 
         await matchRepository.save(testMatch);
         return res.json({ success: 1, msg: "Test matches created" });
+    }
+
+    static async getNotifications(req: Request, res: Response) {
+        try {
+            const notificationRepository = AppDataSource.getRepository(Notification);
+            const notifications = await notificationRepository.find({
+                where: { user: IsNull() },
+                order: { createdAt: "DESC" },
+                take: 20
+            });
+            return res.json({ success: 1, result: notifications });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed" });
+        }
     }
 }

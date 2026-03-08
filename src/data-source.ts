@@ -11,6 +11,7 @@ import { UserAchievement } from "./entities/UserAchievement.js";
 import { GameReward } from "./entities/GameReward.js";
 import { GemPackage } from "./entities/GemPackage.js";
 import { GameHistory } from "./entities/GameHistory.js";
+import { Notification } from "./entities/Notification.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -36,8 +37,14 @@ export const AppDataSource = new DataSource({
         UserAchievement,
         GameReward,
         GemPackage,
-        GameHistory
+        GameHistory,
+        Notification
     ],
     migrations: [],
     subscribers: [],
+    extra: {
+        max: 20, // max connections in pool
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+    }
 });

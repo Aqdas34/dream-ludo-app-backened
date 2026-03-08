@@ -59,14 +59,26 @@ export class User {
     @OneToMany("RewardHistory", "user")
     rewardHistories!: any[];
 
-    @CreateDateColumn()
-    createdAt!: Date;
+    @Column({ default: 0 })
+    streakDays!: number;
+
+    @Column({ default: 0 })
+    experience!: number;
+
+    @Column({ default: 1 })
+    level!: number;
+
+    @Column({ default: false })
+    isBanned!: boolean;
 
     @Column({ default: false })
     isAdmin!: boolean;
 
     @Column({ default: false })
     isProfileCompleted!: boolean;
+
+    @CreateDateColumn()
+    createdAt!: Date;
 
     @UpdateDateColumn()
     updatedAt!: Date;

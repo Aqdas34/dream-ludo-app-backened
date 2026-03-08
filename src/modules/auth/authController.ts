@@ -78,13 +78,27 @@ export class AuthController {
                 password: hashedPassword,
                 isProfileCompleted: true,
                 gender: gender || null,
-                gems: 10, // Give 10 gems as a bonus for joining!
-                referralCode: Math.random().toString(36).substring(7).toUpperCase(),
+                gems: 10,
+                referralCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
                 referredBy: req.body.referer || null
             });
 
             await userRepository.save(user);
             console.log(`✅ Registration successful: ${username}`);
+
+            // ── Handle Referral Reward ──────────────────────────────────
+            if (req.body.referer) {
+                const referrer = await userRepository.findOneBy({ referralCode: req.body.referer });
+                if (referrer) {
+                    try {
+                        const { RewardService } = await import("../rewards/rewardService.js");
+                        await RewardService.processReferral(referrer.id, user.id);
+                        console.log(`🎁 Referral rewards processed for ${referrer.username} and ${user.username}`);
+                    } catch (err) {
+                        console.error("❌ Referral processing error:", err);
+                    }
+                }
+            }
 
             // Generate JWT
             const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'secret', { expiresIn: '1d' });

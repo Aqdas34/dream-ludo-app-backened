@@ -45,5 +45,30 @@ export const redis = {
         } catch { }
         memCache.delete(key);
         return 1;
+    },
+    // Set operations (Missing in previous version)
+    sAdd: async (key: string, value: string) => {
+        try {
+            if (client.isOpen) return await client.sAdd(key, value);
+        } catch { }
+        const set = JSON.parse(memCache.get(key) || "[]");
+        if (!set.includes(value)) set.push(value);
+        memCache.set(key, JSON.stringify(set));
+        return 1;
+    },
+    sMembers: async (key: string) => {
+        try {
+            if (client.isOpen) return await client.sMembers(key);
+        } catch { }
+        return JSON.parse(memCache.get(key) || "[]");
+    },
+    sRem: async (key: string, value: string) => {
+        try {
+            if (client.isOpen) return await client.sRem(key, value);
+        } catch { }
+        const set = JSON.parse(memCache.get(key) || "[]") as string[];
+        const filtered = set.filter(v => v !== value);
+        memCache.set(key, JSON.stringify(filtered));
+        return 1;
     }
 } as any;

@@ -22,3 +22,23 @@ export const socketAuth = async (socket: any, next: (err?: Error) => void) => {
         return next(); // Still allow guest if token is invalid
     }
 };
+
+export const authMiddleware = async (req: any, res: any, next: () => void) => {
+    try {
+        const rawToken = req.headers['authorization'] || req.query.token;
+        if (!rawToken) return next();
+
+        const token = String(rawToken).startsWith('Bearer ') ? rawToken.split(' ')[1] : rawToken;
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOneBy({ id: decoded.id });
+        if (user) {
+            req.user = user;
+            req.userId = user.id.toString();
+        }
+        return next();
+    } catch (e) {
+        return next();
+    }
+};

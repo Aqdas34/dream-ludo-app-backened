@@ -32,5 +32,13 @@ export class EnhancedRewardController {
         }
     }
 
-    // Additional leaderboard, achievements endpoints can go here...
+    static async getHistory(req: Request, res: Response) {
+        try {
+            const userId = req.params.userId as string;
+            const history = await EnhancedRewardService.getGemHistory(userId);
+            res.json({ success: true, history });
+        } catch (error: any) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
 }

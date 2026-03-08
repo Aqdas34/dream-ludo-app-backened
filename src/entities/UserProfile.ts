@@ -23,6 +23,12 @@ export class UserProfile {
     @Column({ type: "int", default: 1 })
     level!: number;
 
+    @Column({ type: "int", default: 0 })
+    total_games_played!: number;
+
+    @Column({ type: "int", default: 0 })
+    total_wins!: number;
+
     @CreateDateColumn()
     created_at!: Date;
 

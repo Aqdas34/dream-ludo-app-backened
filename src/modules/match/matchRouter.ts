@@ -11,5 +11,6 @@ router.post("/post_join_match", MatchController.joinMatch);
 router.post("/delete_participant", MatchController.leaveMatch);
 router.post("/post_result", MatchController.submitResult);
 router.post("/create_test_matches", MatchController.createTestMatches);
+router.get("/get_notifications", MatchController.getNotifications);
 
 export default router;

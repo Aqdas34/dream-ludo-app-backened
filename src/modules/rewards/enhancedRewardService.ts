@@ -1,12 +1,9 @@
 import { AppDataSource } from "../../data-source.js";
-import { UserProfile } from "../../entities/UserProfile.js";
+import { User } from "../../entities/User.js";
 import { GemTransaction } from "../../entities/GemTransaction.js";
-import { DailyReward } from "../../entities/DailyReward.js";
-import { GameReward } from "../../entities/GameReward.js";
-import { Achievement } from "../../entities/Achievement.js";
-import { UserAchievement } from "../../entities/UserAchievement.js";
 import { GemPackage } from "../../entities/GemPackage.js";
 import { Purchase } from "../../entities/Purchase.js";
+import { RewardHistory, RewardType } from "../../entities/RewardHistory.js";
 
 export enum TransactionType {
     PURCHASE = "purchase",
@@ -16,25 +13,23 @@ export enum TransactionType {
 }
 
 export class EnhancedRewardService {
-    // ── Gem Economy Management ────────────────────────────────────
+    // ── User Data ────────────────────────────────────────────────
     static async getGemBalance(userId: string) {
-        const profile = await AppDataSource.getRepository(UserProfile).findOneBy({ user_id: userId });
-        return profile?.gems_balance || 0;
+        const user = await AppDataSource.getRepository(User).findOneBy({ id: Number(userId) });
+        return user?.gems || 0;
     }
 
     static async addGems(userId: string, amount: number, type: TransactionType, description?: string, referenceId?: string) {
         return await AppDataSource.transaction(async (manager) => {
-            let profile = await manager.findOneBy(UserProfile, { user_id: userId });
-            if (!profile) {
-                profile = manager.create(UserProfile, { user_id: userId, gems_balance: 0 });
-                await manager.save(profile);
-            }
+            const user = await manager.findOneBy(User, { id: Number(userId) });
+            if (!user) throw new Error("User not found");
 
-            profile.gems_balance += amount;
-            if (profile.gems_balance < 0) throw new Error("Insufficient gem balance");
+            user.gems = (user.gems || 0) + amount;
+            if (user.gems < 0) throw new Error("Insufficient gem balance");
 
-            await manager.save(profile);
+            await manager.save(user);
 
+            // Log in Legacy Transaction table
             const transaction = manager.create(GemTransaction, {
                 user_id: userId,
                 amount: amount,
@@ -44,101 +39,114 @@ export class EnhancedRewardService {
             });
             await manager.save(transaction);
 
-            return profile.gems_balance;
+            // Log in User Reward History
+            let historyType = RewardType.DAILY_LOGIN; // Fallback
+            if (type === TransactionType.PURCHASE) historyType = RewardType.PURCHASE;
+            if (description?.includes("Win")) historyType = RewardType.GAME_WIN;
+
+            const history = manager.create(RewardHistory, {
+                user: user,
+                type: historyType,
+                amount: amount,
+                description: description || "Gems adjustment"
+            });
+            await manager.save(history);
+
+            return user.gems;
         });
     }
 
     // ── Daily Reward System ───────────────────────────────────────
     static async claimDailyReward(userId: string) {
         return await AppDataSource.transaction(async (manager) => {
-            let dr = await manager.findOneBy(DailyReward, { user_id: userId });
+            const user = await manager.findOneBy(User, { id: Number(userId) });
+            if (!user) throw new Error("User not found");
+
             const now = new Date();
             const today = now.toISOString().split('T')[0];
+            const lastClaimDate = user.lastDailyClaim ? user.lastDailyClaim.toISOString().split('T')[0] : null;
 
-            if (dr && dr.last_claimed_date === today) {
+            if (lastClaimDate === today) {
                 throw new Error("Already claimed today");
             }
 
-            if (!dr) {
-                dr = manager.create(DailyReward, { user_id: userId, streak_days: 0 });
-            }
-
-            // Check if streak is continued
+            // Check streak
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-            if (dr.last_claimed_date === yesterdayStr) {
-                dr.streak_days += 1;
+            if (lastClaimDate === yesterdayStr) {
+                user.streakDays += 1;
             } else {
-                dr.streak_days = 1;
+                user.streakDays = 1;
             }
 
-            const rewardAmount = 10 + Math.min(dr.streak_days - 1, 10) * 5;
-            dr.last_claimed_date = today;
-            dr.total_claimed += 1;
-            await manager.save(dr);
+            // Reward calculation: Base 10 + (streak * 5)
+            const rewardAmount = 10 + Math.min(user.streakDays - 1, 6) * 5;
 
-            await this.addGems(userId, rewardAmount, TransactionType.REWARD, `Daily Reward (Day ${dr.streak_days})`);
+            user.lastDailyClaim = now;
+            user.gems = (user.gems || 0) + rewardAmount;
+            await manager.save(user);
 
-            return { streak: dr.streak_days, reward: rewardAmount };
+            // Record history
+            const history = manager.create(RewardHistory, {
+                user: user,
+                type: RewardType.DAILY_LOGIN,
+                amount: rewardAmount,
+                description: `Daily Reward (Day ${user.streakDays})`
+            });
+            await manager.save(history);
+
+            return { streak: user.streakDays, reward: rewardAmount, totalGems: user.gems };
         });
     }
 
-    // ── Achievement Management ────────────────────────────────────
-    static async trackProgress(userId: string, achievementKey: string, increment: number = 1) {
+    // ── Game Stats & Rewards ──────────────────────────────────────
+    static async updateGameRewards(userId: string, isWinner: boolean) {
         return await AppDataSource.transaction(async (manager) => {
-            const achievement = await manager.findOneBy(Achievement, { achievement_key: achievementKey });
-            if (!achievement) return;
+            const user = await manager.findOneBy(User, { id: Number(userId) });
+            if (!user) throw new Error("User not found");
 
-            let ua = await manager.findOne(UserAchievement, {
-                where: { user_id: userId, achievement_id: achievement.id }
+            const gemReward = isWinner ? 10 : 2;
+            const xpReward = isWinner ? 100 : 25;
+
+            user.totalGames += 1;
+            if (isWinner) user.totalWins += 1;
+            user.experience += xpReward;
+
+            // Level up logic: every 1000 XP
+            user.level = Math.floor(user.experience / 1000) + 1;
+            user.gems = (user.gems || 0) + gemReward;
+
+            await manager.save(user);
+
+            const history = manager.create(RewardHistory, {
+                user: user,
+                type: isWinner ? RewardType.GAME_WIN : RewardType.GAME_PARTICIPATION,
+                amount: gemReward,
+                description: isWinner ? "Game Win Reward" : "Game Participation Reward"
             });
+            await manager.save(history);
 
-            if (!ua) {
-                ua = manager.create(UserAchievement, { user_id: userId, achievement_id: achievement.id });
-            }
-
-            if (ua.is_completed) return;
-
-            ua.current_progress += increment;
-            if (ua.current_progress >= achievement.max_progress) {
-                ua.is_completed = true;
-                ua.completed_at = new Date();
-
-                // Auto-award gems if configured
-                if (achievement.reward_gems > 0) {
-                    await this.addGems(userId, achievement.reward_gems, TransactionType.REWARD, `Achievement: ${achievement.name}`);
-                }
-
-                // Increment XP/Level logic
-                if (achievement.reward_xp > 0) {
-                    const profile = await manager.findOneBy(UserProfile, { user_id: userId });
-                    if (profile) {
-                        profile.experience_points += achievement.reward_xp;
-                        // Simple level up logic: levels every 1000 XP
-                        profile.level = Math.floor(profile.experience_points / 1000) + 1;
-                        await manager.save(profile);
-                    }
-                }
-            }
-
-            await manager.save(ua);
+            return { gems: user.gems, level: user.level, wins: user.totalWins };
         });
     }
 
     // ── Gem Purchases ─────────────────────────────────────────────
     static async processPurchase(userId: string, packageId: string, transactionId: string) {
         return await AppDataSource.transaction(async (manager) => {
+            const user = await manager.findOneBy(User, { id: Number(userId) });
+            if (!user) throw new Error("User not found");
+
             const pkg = await manager.findOneBy(GemPackage, { id: packageId });
             if (!pkg) throw new Error("Invalid gem package");
 
-            const totalGems = pkg.gems_amount + pkg.bonus_gems;
+            const totalGemsAdded = pkg.gems_amount + pkg.bonus_gems;
 
             const purchase = manager.create(Purchase, {
                 user_id: userId,
                 gem_package_id: packageId,
-                gems_amount: totalGems,
+                gems_amount: totalGemsAdded,
                 price: pkg.price,
                 currency: pkg.currency,
                 transaction_id: transactionId,
@@ -146,9 +154,27 @@ export class EnhancedRewardService {
             });
             await manager.save(purchase);
 
-            await this.addGems(userId, totalGems, TransactionType.PURCHASE, `Purchase: ${pkg.name}`, purchase.id);
+            user.gems = (user.gems || 0) + totalGemsAdded;
+            await manager.save(user);
 
-            return { gemsAdded: totalGems };
+            const history = manager.create(RewardHistory, {
+                user: user,
+                type: RewardType.PURCHASE,
+                amount: totalGemsAdded,
+                description: `Purchase: ${pkg.name}`
+            });
+            await manager.save(history);
+
+            return { gemsAdded: totalGemsAdded, totalGems: user.gems };
+        });
+    }
+
+    static async getGemHistory(userId: string) {
+        const repo = AppDataSource.getRepository(RewardHistory);
+        return await repo.find({
+            where: { user: { id: Number(userId) } },
+            order: { createdAt: "DESC" },
+            take: 20
         });
     }
 }
