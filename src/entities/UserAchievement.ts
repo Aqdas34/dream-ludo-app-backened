@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, type Relation } from "typeorm";
-import { UserProfile } from "./UserProfile.js";
+import { User } from "./User.js";
 import { Achievement } from "./Achievement.js";
 
 @Entity("user_achievements")
@@ -8,9 +8,9 @@ export class UserAchievement {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
-    @ManyToOne(() => UserProfile, (user) => user.achievements)
+    @ManyToOne(() => User)
     @JoinColumn({ name: "user_id" })
-    user!: Relation<UserProfile>;
+    user!: Relation<User>;
 
     @Column()
     user_id!: string;

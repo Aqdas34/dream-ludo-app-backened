@@ -41,4 +41,24 @@ export class EnhancedRewardController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+
+    static async getAchievements(req: Request, res: Response) {
+        try {
+            const userId = req.params.userId as string;
+            const achievements = await EnhancedRewardService.getUserAchievements(userId);
+            res.json({ success: true, achievements });
+        } catch (error: any) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
+
+    static async claimAchievement(req: Request, res: Response) {
+        try {
+            const { userId, userAchievementId } = req.body;
+            const result = await EnhancedRewardService.claimAchievementReward(userId, userAchievementId);
+            res.json({ success: true, ...result });
+        } catch (error: any) {
+            res.status(400).json({ success: false, message: error.message });
+        }
+    }
 }

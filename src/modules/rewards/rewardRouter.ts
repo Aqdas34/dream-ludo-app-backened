@@ -13,5 +13,7 @@ router.get("/gems/balance/:userId", EnhancedRewardController.getBalance);
 router.post("/gems/claim-daily", EnhancedRewardController.claimDaily);
 router.post("/gems/verify-purchase", EnhancedRewardController.verifyPurchase);
 router.get("/gems/history/:userId", EnhancedRewardController.getHistory);
+router.get("/gems/achievements/:userId", EnhancedRewardController.getAchievements);
+router.post("/gems/claim-achievement", EnhancedRewardController.claimAchievement);
 
 export default router;

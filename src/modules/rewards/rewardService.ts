@@ -81,16 +81,14 @@ export class RewardService {
                 user.streakDays = 1;
             }
 
-            // Streak Multiplier: Bonus gems for longer streaks
-            const baseGems = 10;
-            const streakBonus = Math.min(user.streakDays - 1, 10) * 5; // Max 50 bonus
-            const totalGems = baseGems + streakBonus;
+            // Streak Multiplier: Set to static 1 gem as requested
+            const totalGems = 1;
 
             user.lastDailyClaim = now;
             await manager.save(user);
 
             await this.addReward(manager, user, totalGems, RewardType.DAILY_LOGIN,
-                `Daily Login (Day ${user.streakDays}) - streak bonus: +${streakBonus}`
+                `Daily Login (Day ${user.streakDays})`
             );
 
             return { gems: user.gems, streak: user.streakDays, awarded: totalGems };

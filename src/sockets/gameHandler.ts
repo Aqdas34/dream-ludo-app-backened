@@ -81,7 +81,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                 isRolling: false,
                 hasRolled: false,
                 totalPlayerCount: data.playerCount || 4,
-                requiredGender: gender,
+                requiredGender: gender ? gender.toUpperCase() : null,
                 isPrivate: data.isPrivate ?? false,
             };
 
@@ -94,7 +94,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
 
             await socket.join(roomId);
             socket.emit("roomCreated", roomState);
-            console.log(`🏠 Room ${roomId} created by ${username} [${roomState.isPrivate ? "PRIVATE" : "PUBLIC"}]`);
+            console.log(`🏠 Room ${roomId} created by ${username} [Gender: ${roomState.requiredGender || "ANY"}]`);
         } catch (error) {
             console.error("Error in createRoom:", error);
             socket.emit("error", "Failed to create room");
@@ -123,13 +123,19 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
 
             const userId = (user?.id || clientUserId || `guest_${Math.floor(Math.random() * 1000)}`).toString();
             const username = user?.display_name || user?.username || clientUsername || `Guest_${userId.substring(0, 5)}`;
-            const resolvedGender = user?.gender || clientGender;
+            const resolvedGender = (user?.gender || clientGender)?.toString().toUpperCase();
 
             (socket as any).userId = userId;
             (socket as any).roomId = roomId;
 
-            if (roomState.requiredGender && resolvedGender && resolvedGender.toUpperCase() !== roomState.requiredGender.toUpperCase()) {
-                return socket.emit("error", "Gender mismatch for this room");
+            // Strict Gender Enforcement
+            if (roomState.requiredGender) {
+                if (!resolvedGender) {
+                    return socket.emit("error", "Profile incomplete. Please set your gender in settings to join this room.");
+                }
+                if (resolvedGender !== roomState.requiredGender.toUpperCase()) {
+                    return socket.emit("error", `This room is restricted to ${roomState.requiredGender} players only.`);
+                }
             }
 
             // Already in room?
@@ -225,30 +231,98 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
 
     // ── Dice & Game Logic Aliases ─────────────────────────────────
     socket.on("rollDice", async (roomId: string) => {
-        const roomData = await redis.get(`room:${roomId}`);
-        if (!roomData) return;
-        const roomState: RoomState = JSON.parse(roomData);
-        if (roomState.status !== GameStatus.PLAYING) return;
+        try {
+            const roomData = await redis.get(`room:${roomId}`);
+            if (!roomData) return;
+            const roomState: RoomState = JSON.parse(roomData);
+            if (roomState.status !== GameStatus.PLAYING) return;
 
-        const userId = (socket as any).userId;
-        if (roomState.players[roomState.turn].userId !== userId) return;
-        if (roomState.hasRolled || roomState.isRolling) return;
+            const userId = (socket as any).userId;
+            const currentPlayer = roomState.players[roomState.turn % roomState.players.length];
+            if (currentPlayer.userId !== userId) return;
+            if (roomState.hasRolled || roomState.isRolling) return;
 
-        roomState.isRolling = true;
-        const roll = Math.floor(Math.random() * 6) + 1;
-        roomState.diceValue = roll;
-        roomState.isRolling = false;
-        roomState.hasRolled = true;
+            // Mark as rolling
+            roomState.isRolling = true;
+            await redis.set(`room:${roomId}`, JSON.stringify(roomState), { EX: 3600 });
+            io.to(roomId).emit("roomUpdated", roomState);
 
-        await redis.set(`room:${roomId}`, JSON.stringify(roomState), { EX: 3600 });
-        io.to(roomId).emit("diceRolled", { roll, turn: roomState.turn });
-        io.to(roomId).emit("roomUpdated", roomState);
+            // Wait 1s for rolling animation
+            setTimeout(async () => {
+                const updatedRoomData = await redis.get(`room:${roomId}`);
+                if (!updatedRoomData) return;
+                const rState: RoomState = JSON.parse(updatedRoomData);
 
-        // Auto move if no pieces or only one piece? (Engine logic would go here)
+                const roll = Math.floor(Math.random() * 6) + 1;
+                rState.diceValue = roll;
+                rState.isRolling = false;
+                rState.hasRolled = true;
+
+                // Check if player can move ANY piece
+                const player = rState.players[rState.turn % rState.players.length];
+                const canMoveAny = player.pieces.some((_, idx) => LudoEngine.canMove(player, idx, roll));
+
+                if (!canMoveAny) {
+                    // Pass turn after 1.5s delay
+                    setTimeout(async () => {
+                        const rData = await redis.get(`room:${roomId}`);
+                        if (!rData) return;
+                        const rs: RoomState = JSON.parse(rData);
+                        rs.turn = (rs.turn + 1) % rs.players.length;
+                        rs.hasRolled = false;
+                        await redis.set(`room:${roomId}`, JSON.stringify(rs), { EX: 3600 });
+                        io.to(roomId).emit("roomUpdated", rs);
+                    }, 1500);
+                }
+
+                await redis.set(`room:${roomId}`, JSON.stringify(rState), { EX: 3600 });
+                io.to(roomId).emit("diceRolled", { roll, turn: rState.turn });
+                io.to(roomId).emit("roomUpdated", rState);
+            }, 600);
+
+        } catch (error) {
+            console.error("Error rolling dice:", error);
+        }
     });
 
     socket.on("movePiece", async (data: { roomId: string, pieceIndex: number }) => {
-        // ... (Piece moving logic already implemented in previous versions - keeping it simplified here to focus on Room Management)
+        try {
+            const roomData = await redis.get(`room:${data.roomId}`);
+            if (!roomData) return;
+            const roomState: RoomState = JSON.parse(roomData);
+            if (roomState.status !== GameStatus.PLAYING || !roomState.hasRolled) return;
+
+            const userId = (socket as any).userId;
+            const playerIdx = roomState.turn % roomState.players.length;
+            const player = roomState.players[playerIdx];
+
+            if (player.userId !== userId) return;
+
+            if (LudoEngine.canMove(player, data.pieceIndex, roomState.diceValue)) {
+                LudoEngine.movePiece(roomState, data.pieceIndex);
+
+                if (LudoEngine.checkWinner(roomState)) {
+                    roomState.status = GameStatus.FINISHED;
+                    roomState.winner = player.userId;
+
+                    // Award gems to winner
+                    try {
+                        await RewardService.updateGameRewards(Number(player.userId), true);
+                    } catch (e) { }
+                } else {
+                    // Turn passes unless it was a 6
+                    if (roomState.diceValue !== 6) {
+                        roomState.turn = (roomState.turn + 1) % roomState.players.length;
+                    }
+                    roomState.hasRolled = false;
+                }
+
+                await redis.set(`room:${data.roomId}`, JSON.stringify(roomState), { EX: 3600 });
+                io.to(data.roomId).emit("roomUpdated", roomState);
+            }
+        } catch (error) {
+            console.error("Error moving piece:", error);
+        }
     });
 
     socket.on("sendMessage", async (data: { roomId: string, message: string }) => {
