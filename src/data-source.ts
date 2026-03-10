@@ -34,7 +34,7 @@ export const AppDataSource = new DataSource({
             database: process.env.DB_NAME || "dream_ludo"
         }),
 
-    synchronize: !isProduction,
+    synchronize: true,
     logging: false,
     // host: process.env.DB_HOST || "localhost",
     // port: parseInt(process.env.DB_PORT || "5432"),
