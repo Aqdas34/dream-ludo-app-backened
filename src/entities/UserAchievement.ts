@@ -33,4 +33,7 @@ export class UserAchievement {
 
     @Column({ default: false })
     claimed_reward!: boolean;
+
+    @Column({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" })
+    created_at!: Date;
 }

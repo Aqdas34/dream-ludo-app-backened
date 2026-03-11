@@ -182,80 +182,58 @@ export class EnhancedRewardService {
 
     // ── Achievements System ───────────────────────────────────────
     static async getUserAchievements(userId: string) {
-        const uaRepo = AppDataSource.getRepository(UserAchievement);
-        const achRepo = AppDataSource.getRepository(Achievement);
+        try {
+            const uaRepo = AppDataSource.getRepository(UserAchievement);
+            const achRepo = AppDataSource.getRepository(Achievement);
 
-        // Ensure "welcome" achievement exists for everyone
-        let welcomeAch = await achRepo.findOneBy({ achievement_key: "welcome" });
-        if (!welcomeAch) {
-            welcomeAch = achRepo.create({
-                achievement_key: "welcome",
-                name: "Welcome to Dream Ludo",
-                description: "Thanks for joining us! Here's a small gift to start.",
-                category: "special",
-                reward_gems: 50,
-                reward_xp: 100,
-                max_progress: 1,
-                is_hidden: false
-            });
-            await achRepo.save(welcomeAch);
-        }
-
-        // Check if user has it
-        let ua = await uaRepo.findOneBy({ user_id: userId, achievement_id: welcomeAch.id });
-        if (!ua) {
-            ua = uaRepo.create({
-                user_id: userId,
-                achievement_id: welcomeAch.id,
-                achievement: welcomeAch,
-                current_progress: 1,
-                is_completed: true, // Welcome is automatic
-                claimed_reward: false
-            });
-            await uaRepo.save(ua);
-        }
-
-        // Additional default achievements (can be seeded or initialized here)
-        const commonAchs = [
-            { key: "first_game", name: "First Steps", desc: "Play your first game of Ludo.", gems: 10, xp: 100, max: 1 },
-            { key: "wins_5", name: "Winning Streak", desc: "Win 5 matches total.", gems: 50, xp: 500, max: 5 },
-        ];
-
-        for (const meta of commonAchs) {
-            let a = await achRepo.findOneBy({ achievement_key: meta.key });
-            if (!a) {
-                a = achRepo.create({
-                    achievement_key: meta.key,
-                    name: meta.name,
-                    description: meta.desc,
-                    reward_gems: meta.gems,
-                    reward_xp: meta.xp,
-                    max_progress: meta.max,
+            // 1. Ensure "welcome" achievement exists
+            let welcomeAch = await achRepo.findOneBy({ achievement_key: "welcome" });
+            if (!welcomeAch) {
+                welcomeAch = achRepo.create({
+                    achievement_key: "welcome",
+                    name: "Welcome to Dream Ludo",
+                    description: "Thanks for joining us! Here's a small gift to start.",
+                    category: "special",
+                    reward_gems: 50,
+                    reward_xp: 100,
+                    max_progress: 1,
                     is_hidden: false
                 });
-                await achRepo.save(a);
+                await achRepo.save(welcomeAch);
             }
 
-            // Ensure user has trace for these
-            let checkUa = await uaRepo.findOneBy({ user_id: userId, achievement_id: a.id });
-            if (!checkUa) {
-                checkUa = uaRepo.create({
-                    user_id: userId,
-                    achievement_id: a.id,
-                    achievement: a,
-                    current_progress: 0,
-                    is_completed: false,
-                    claimed_reward: false
-                });
-                await uaRepo.save(checkUa);
+            // 2. Fetch all non-hidden achievements
+            const allAchievements = await achRepo.find({ where: { is_hidden: false } });
+
+            // 3. Ensure user has entries
+            const existingUas = await uaRepo.find({ where: { user_id: userId } });
+            const existingAchIds = new Set(existingUas.map(ua => ua.achievement_id));
+
+            for (const ach of allAchievements) {
+                if (!existingAchIds.has(ach.id)) {
+                    const isWelcome = ach.achievement_key === "welcome";
+                    const newUa = uaRepo.create({
+                        user_id: userId,
+                        achievement_id: ach.id,
+                        achievement: ach,
+                        current_progress: isWelcome ? 1 : 0,
+                        is_completed: isWelcome, 
+                        claimed_reward: false
+                    });
+                    await uaRepo.save(newUa);
+                }
             }
+
+            // 4. Return progress (Ordered by id since created_at was just added)
+            return await uaRepo.find({
+                where: { user_id: userId },
+                relations: ["achievement"],
+                order: { id: "ASC" }
+            });
+        } catch (error) {
+            console.error("❌ Error in getUserAchievements:", error);
+            throw error;
         }
-
-        const achievements = await uaRepo.find({
-            where: { user_id: userId },
-            relations: ["achievement"]
-        });
-        return achievements;
     }
 
     static async claimAchievementReward(userId: string, userAchievementId: string) {

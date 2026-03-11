@@ -5,6 +5,7 @@ import { User } from "../../entities/User.js";
 import { Match } from "../../entities/Match.js";
 import { RewardHistory } from "../../entities/RewardHistory.js";
 import { Notification } from "../../entities/Notification.js";
+import { Achievement } from "../../entities/Achievement.js";
 import { redis } from "../../config/redis.js";
 
 export class AdminController {
@@ -152,6 +153,68 @@ export class AdminController {
             return res.json({ success: 1, msg: "Broadcast sent and saved" });
         } catch (error) {
             return res.status(500).json({ success: 0, msg: "Failed to send broadcast" });
+        }
+    }
+
+    // --- User Management ---
+    static async deleteUser(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const userRepository = AppDataSource.getRepository(User);
+            const user = await userRepository.findOneBy({ id: Number(id) });
+            if (!user) return res.status(404).json({ success: 0, msg: "User not found" });
+
+            await userRepository.remove(user);
+            return res.json({ success: 1, msg: "User deleted successfully" });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to delete user" });
+        }
+    }
+
+    // --- Achievement Management ---
+    static async getAllAchievements(req: Request, res: Response) {
+        try {
+            const achievementRepo = AppDataSource.getRepository(Achievement);
+            const achievements = await achievementRepo.find({ order: { id: "DESC" } });
+            return res.json({ success: 1, achievements });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to fetch achievements" });
+        }
+    }
+
+    static async createAchievement(req: Request, res: Response) {
+        try {
+            const { name, achievement_key, description, icon_url, reward_gems, category, max_progress } = req.body;
+            const achievementRepo = AppDataSource.getRepository(Achievement);
+
+            const achievement = achievementRepo.create({
+                name,
+                achievement_key,
+                description,
+                icon_url,
+                reward_gems: Number(reward_gems),
+                category,
+                max_progress: Number(max_progress)
+            });
+
+            await achievementRepo.save(achievement);
+            return res.json({ success: 1, achievement });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to create achievement" });
+        }
+    }
+
+    static async deleteAchievement(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const achievementRepo = AppDataSource.getRepository(Achievement);
+            const achievement = await achievementRepo.findOneBy({ id: id as string });
+            if (!achievement) return res.status(404).json({ success: 0, msg: "Achievement not found" });
+
+            await achievementRepo.remove(achievement);
+            return res.json({ success: 1, msg: "Achievement deleted" });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to delete achievement" });
         }
     }
 }

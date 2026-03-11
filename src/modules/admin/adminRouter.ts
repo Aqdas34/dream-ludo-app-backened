@@ -12,4 +12,12 @@ router.get("/audit-logs", AdminController.getAuditLogs);
 router.post("/broadcast", AdminController.broadcastMessage);
 router.get("/broadcasts", AdminController.getBroadcastHistory);
 
+// Achievements
+router.get("/achievements", AdminController.getAllAchievements);
+router.post("/achievements", AdminController.createAchievement);
+router.delete("/achievements/:id", AdminController.deleteAchievement);
+
+// Advanced User Control
+router.delete("/users/:id", AdminController.deleteUser);
+
 export default router;
