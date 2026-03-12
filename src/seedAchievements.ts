@@ -72,11 +72,14 @@ async function seedAchievements() {
         const users = await userRepo.find();
         for (const user of users) {
             const userId = user.id.toString();
-            let ua = await uaRepo.findOneBy({ user_id: userId, achievement_key: "welcome" });
+            let ua = await uaRepo.findOneBy({ 
+                user_id: userId, 
+                achievement_id: welcomeAch.id 
+            });
             if (!ua) {
                 ua = uaRepo.create({
                     user_id: userId,
-                    achievement_key: "welcome",
+                    achievement_id: welcomeAch.id,
                     achievement: welcomeAch,
                     current_progress: 1,
                     is_completed: true,
