@@ -7,7 +7,16 @@ const client = createClient({
     url: process.env.REDIS_URL || "redis://localhost:6379"
 });
 
-client.on("error", (err) => console.log("⚠️ Redis connection failed, using Memory Cache instead."));
+console.log(`📡 Connecting to Redis: ${process.env.REDIS_URL || "redis://127.0.0.1:6379"}`);
+
+client.on("error", (err) => {
+    // Only log if we haven't already handled it or if it's a persistent error
+    if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+        console.log("⚠️ Redis connection refused. Using Memory Cache instead.");
+    } else {
+        console.log("⚠️ Redis error:", err.message);
+    }
+});
 
 export const connectRedis = async () => {
     try {

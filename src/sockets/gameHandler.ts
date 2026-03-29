@@ -337,6 +337,19 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
         });
     });
 
+    socket.on("webrtcSignal", (data: { roomId: string, targetUserId: string, type: string, payload: any }) => {
+        const senderUserId = (socket as any).userId;
+        // Forward signaling data to the specific user
+        io.to(data.roomId).emit("webrtcSignal", {
+            ...data,
+            senderUserId: senderUserId
+        });
+    });
+
+    socket.on("mediaStateUpdate", (data: { roomId: string, userId: string, isAudioOn: boolean, isVideoOn: boolean }) => {
+        io.to(data.roomId).emit("mediaStateUpdate", data);
+    });
+
     socket.on("disconnect", async () => {
         const roomId = (socket as any).roomId;
         if (roomId) {

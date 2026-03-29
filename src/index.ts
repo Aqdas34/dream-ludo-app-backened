@@ -1,9 +1,11 @@
 import "reflect-metadata";
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
-import dotenv from "dotenv";
 import { AppDataSource } from "./data-source.js";
 import { setupSockets } from "./sockets/index.js";
 
@@ -12,8 +14,6 @@ import matchRouter from "./modules/match/matchRouter.js";
 import rewardRouter from "./modules/rewards/rewardRouter.js";
 import adminRouter from "./modules/admin/adminRouter.js";
 import leaderboardRouter from "./modules/leaderboard/leaderboardRouter.js";
-
-dotenv.config();
 
 const app = express();
 app.use(cors());
