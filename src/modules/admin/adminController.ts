@@ -6,6 +6,7 @@ import { Match } from "../../entities/Match.js";
 import { RewardHistory } from "../../entities/RewardHistory.js";
 import { Notification } from "../../entities/Notification.js";
 import { Achievement } from "../../entities/Achievement.js";
+import { GemPackage } from "../../entities/GemPackage.js";
 import { redis } from "../../config/redis.js";
 
 export class AdminController {
@@ -215,6 +216,73 @@ export class AdminController {
             return res.json({ success: 1, msg: "Achievement deleted" });
         } catch (error) {
             return res.status(500).json({ success: 0, msg: "Failed to delete achievement" });
+        }
+    }
+
+    // --- Gem Package Management ---
+    static async getAllGemPackages(req: Request, res: Response) {
+        try {
+            const packageRepo = AppDataSource.getRepository(GemPackage);
+            const packages = await packageRepo.find({ order: { sort_order: "ASC" } });
+            return res.json({ success: 1, packages });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to fetch gem packages" });
+        }
+    }
+
+    static async createGemPackage(req: Request, res: Response) {
+        try {
+            const { id, name, gems_amount, bonus_gems, price, currency, is_popular, sort_order, is_active } = req.body;
+            const packageRepo = AppDataSource.getRepository(GemPackage);
+
+            const pkg = packageRepo.create({
+                id,
+                name,
+                gems_amount: Number(gems_amount),
+                bonus_gems: Number(bonus_gems || 0),
+                price: Number(price),
+                currency: currency || "USD",
+                is_popular: !!is_popular,
+                sort_order: Number(sort_order || 0),
+                is_active: is_active !== undefined ? !!is_active : true
+            });
+
+            await packageRepo.save(pkg);
+            return res.json({ success: 1, package: pkg });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to create gem package" });
+        }
+    }
+
+    static async updateGemPackage(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const updateData = req.body;
+            const packageRepo = AppDataSource.getRepository(GemPackage);
+            
+            const pkg = await packageRepo.findOneBy({ id: id as string });
+            if (!pkg) return res.status(404).json({ success: 0, msg: "Package not found" });
+
+            Object.assign(pkg, updateData);
+            await packageRepo.save(pkg);
+            
+            return res.json({ success: 1, package: pkg });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to update gem package" });
+        }
+    }
+
+    static async deleteGemPackage(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const packageRepo = AppDataSource.getRepository(GemPackage);
+            const pkg = await packageRepo.findOneBy({ id: id as string });
+            if (!pkg) return res.status(404).json({ success: 0, msg: "Package not found" });
+
+            await packageRepo.remove(pkg);
+            return res.json({ success: 1, msg: "Gem package deleted" });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to delete gem package" });
         }
     }
 }

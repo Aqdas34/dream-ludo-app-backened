@@ -1,7 +1,21 @@
-import { Request, Response } from "express";
+import { AppDataSource } from "../../data-source.js";
+import { GemPackage } from "../../entities/GemPackage.js";
 import { EnhancedRewardService, TransactionType } from "./enhancedRewardService.js";
+import { Request, Response } from "express";
 
 export class EnhancedRewardController {
+    static async getGemPackages(req: Request, res: Response) {
+        try {
+            const packageRepo = AppDataSource.getRepository(GemPackage);
+            const packages = await packageRepo.find({
+                where: { is_active: true },
+                order: { sort_order: "ASC" }
+            });
+            res.json({ success: true, packages });
+        } catch (error: any) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
     static async getBalance(req: Request, res: Response) {
         try {
             const userId = req.params.userId as string;

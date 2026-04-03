@@ -20,4 +20,10 @@ router.delete("/achievements/:id", AdminController.deleteAchievement);
 // Advanced User Control
 router.delete("/users/:id", AdminController.deleteUser);
 
+// Gem Packages
+router.get("/gem-packages", AdminController.getAllGemPackages);
+router.post("/gem-packages", AdminController.createGemPackage);
+router.patch("/gem-packages/:id", AdminController.updateGemPackage);
+router.delete("/gem-packages/:id", AdminController.deleteGemPackage);
+
 export default router;

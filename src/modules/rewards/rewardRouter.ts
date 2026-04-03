@@ -16,4 +16,7 @@ router.get("/gems/history/:userId", EnhancedRewardController.getHistory);
 router.get("/gems/achievements/:userId", EnhancedRewardController.getAchievements);
 router.post("/gems/claim-achievement", EnhancedRewardController.claimAchievement);
 
+// Public Gem Packages
+router.get("/gems/packages", EnhancedRewardController.getGemPackages);
+
 export default router;

@@ -33,11 +33,11 @@ app.use((req: any, res, next) => {
 });
 
 // Main API Routes
+app.use("/api/admin", adminRouter);
 app.use("/api", authRouter);
 app.use("/api", matchRouter);
 app.use("/api", rewardRouter);
 app.use("/api", leaderboardRouter);
-app.use("/api/admin", adminRouter);
 
 const httpServer = createServer(app);
 export const io = new Server(httpServer, {
