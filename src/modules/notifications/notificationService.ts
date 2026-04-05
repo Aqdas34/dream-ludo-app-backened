@@ -1,7 +1,7 @@
 import { AppDataSource } from "../../data-source.js";
 import { Notification } from "../../entities/Notification.js";
 import { User } from "../../entities/User.js";
-import { io } from "../../index.js";
+import { io } from "../../config/socket.js";
 
 export class NotificationService {
     static async sendGlobalBroadcast(title: string, message: string, type: string = "info") {

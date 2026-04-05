@@ -31,7 +31,13 @@ export class Purchase {
     @Column({ length: 255, unique: true, nullable: true })
     transaction_id!: string;
 
-    @Column({ length: 20, default: "completed" })
+    @Column({ length: 255, nullable: true })
+    invoice_id!: string;
+
+    @Column({ type: "text", nullable: true })
+    payment_url!: string;
+
+    @Column({ length: 20, default: "pending" })
     status!: string; // pending, completed, failed, refunded
 
     @CreateDateColumn()

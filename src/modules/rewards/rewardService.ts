@@ -8,6 +8,18 @@ export class RewardService {
         user.gems = (user.gems || 0) + amount;
         await manager.save(user);
 
+        // SYNC TO USERPROFILE
+        try {
+            const { UserProfile } = await import("../../entities/UserProfile.js");
+            const profile = await manager.findOneBy(UserProfile, { user_id: user.id.toString() });
+            if (profile) {
+                profile.gems_balance = user.gems;
+                await manager.save(profile);
+            }
+        } catch (err) {
+            console.error("⚠️ Failed to sync UserProfile gems in addReward:", err);
+        }
+
         const history = new RewardHistory();
         history.user = user;
         history.amount = amount;

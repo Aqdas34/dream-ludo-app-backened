@@ -11,6 +11,7 @@ router.get("/games/live", AdminController.getLiveGames);
 router.get("/audit-logs", AdminController.getAuditLogs);
 router.post("/broadcast", AdminController.broadcastMessage);
 router.get("/broadcasts", AdminController.getBroadcastHistory);
+router.get("/purchases", AdminController.getAllPurchases);
 
 // Achievements
 router.get("/achievements", AdminController.getAllAchievements);
@@ -25,5 +26,8 @@ router.get("/gem-packages", AdminController.getAllGemPackages);
 router.post("/gem-packages", AdminController.createGemPackage);
 router.patch("/gem-packages/:id", AdminController.updateGemPackage);
 router.delete("/gem-packages/:id", AdminController.deleteGemPackage);
+
+router.delete("/purchases/:id", AdminController.deletePurchase);
+router.post("/verify-purchase/:id", AdminController.verifyPurchaseStatus);
 
 export default router;

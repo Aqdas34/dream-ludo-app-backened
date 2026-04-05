@@ -7,6 +7,7 @@ import { RewardHistory } from "../../entities/RewardHistory.js";
 import { Notification } from "../../entities/Notification.js";
 import { Achievement } from "../../entities/Achievement.js";
 import { GemPackage } from "../../entities/GemPackage.js";
+import { Purchase } from "../../entities/Purchase.js";
 import { redis } from "../../config/redis.js";
 
 export class AdminController {
@@ -283,6 +284,84 @@ export class AdminController {
             return res.json({ success: 1, msg: "Gem package deleted" });
         } catch (error) {
             return res.status(500).json({ success: 0, msg: "Failed to delete gem package" });
+        }
+    }
+
+    // --- Transaction Management ---
+    static async getAllPurchases(req: Request, res: Response) {
+        try {
+            const purchaseRepo = AppDataSource.getRepository(Purchase);
+            const purchases = await purchaseRepo.find({
+                order: { created_at: "DESC" },
+                take: 200
+            });
+            return res.json({ success: 1, purchases });
+        } catch (error) {
+            return res.status(500).json({ success: 0, msg: "Failed to fetch purchases" });
+        }
+    }
+
+    static async deletePurchase(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const purchaseRepo = AppDataSource.getRepository(Purchase);
+            const purchase = await purchaseRepo.findOneBy({ id: id as string });
+            
+            if (!purchase) return res.status(404).json({ success: 0, msg: "Purchase not found" });
+
+            await purchaseRepo.remove(purchase);
+            return res.json({ success: 1, msg: "Transaction deleted successfully" });
+        } catch (error) {
+            console.error("Delete purchase error:", error);
+            return res.status(500).json({ success: 0, msg: "Failed to delete transaction" });
+        }
+    }
+
+    static async verifyPurchaseStatus(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const purchaseRepo = AppDataSource.getRepository(Purchase);
+            const purchase = await purchaseRepo.findOneBy({ id: id as string });
+
+            if (!purchase) return res.status(404).json({ success: 0, msg: "Transaction not found" });
+            if (purchase.status === "completed") return res.json({ success: 1, msg: "Transaction already completed" });
+
+            const { PaylinkService } = await import("../payments/paylinkService.js");
+            const { EnhancedRewardService } = await import("../rewards/enhancedRewardService.js");
+            const { io } = await import("../../config/socket.js");
+
+            // Check with Paylink API
+            const invoiceId = purchase.invoice_id || purchase.id;
+            console.log(`🏦 Manual Verification Triggered for Order: ${purchase.id}. Using ID: ${invoiceId}`);
+            
+            const statusResponse = await PaylinkService.getInvoiceStatus(invoiceId);
+            console.log(`🏦 Manual Check [${invoiceId}] Bank Status: ${statusResponse.orderStatus}`);
+
+            if (statusResponse.orderStatus && statusResponse.orderStatus.toString().toLowerCase() === "paid") {
+                // Fulfill it now!
+                const result = await EnhancedRewardService.processPurchase(
+                    purchase.user_id,
+                    purchase.gem_package_id,
+                    invoiceId
+                );
+
+                purchase.status = "completed";
+                purchase.transaction_id = invoiceId;
+                await purchaseRepo.save(purchase);
+
+                // Notify User
+                io.to(`user_${purchase.user_id}`).emit("balance_update", {
+                    gems: result.totalGems,
+                    message: "Payment verified by administrator!"
+                });
+
+                return res.json({ success: 1, msg: "Payment Verified! Gems added.", status: "paid" });
+            }
+
+            return res.json({ success: 1, msg: `Bank Status: ${statusResponse.orderStatus}`, status: statusResponse.orderStatus });
+        } catch (error: any) {
+            console.error("Manual verify error:", error.message);
+            return res.status(500).json({ success: 0, msg: "Verification failed: " + error.message });
         }
     }
 }

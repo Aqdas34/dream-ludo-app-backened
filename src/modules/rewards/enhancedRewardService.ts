@@ -31,6 +31,19 @@ export class EnhancedRewardService {
 
             await manager.save(user);
 
+            // SYNC TO USERPROFILE
+            try {
+                const { UserProfile } = await import("../../entities/UserProfile.js");
+                const profile = await manager.findOneBy(UserProfile, { user_id: userId });
+                if (profile) {
+                    profile.gems_balance = user.gems;
+                    await manager.save(profile);
+                    console.log(`📡 [SYNC] UserProfile gems updated for ${userId}: ${user.gems}`);
+                }
+            } catch (err) {
+                console.error("⚠️ Failed to sync UserProfile gems:", err);
+            }
+
             // Log in Legacy Transaction table
             const transaction = manager.create(GemTransaction, {
                 user_id: userId,
@@ -90,6 +103,16 @@ export class EnhancedRewardService {
             user.gems = (user.gems || 0) + rewardAmount;
             await manager.save(user);
 
+            // SYNC TO USERPROFILE
+            try {
+                const { UserProfile } = await import("../../entities/UserProfile.js");
+                const profile = await manager.findOneBy(UserProfile, { user_id: userId });
+                if (profile) {
+                    profile.gems_balance = user.gems;
+                    await manager.save(profile);
+                }
+            } catch (err) {}
+
             // Record history
             const history = manager.create(RewardHistory, {
                 user: user,
@@ -122,6 +145,20 @@ export class EnhancedRewardService {
 
             await manager.save(user);
 
+            // SYNC TO USERPROFILE
+            try {
+                const { UserProfile } = await import("../../entities/UserProfile.js");
+                const profile = await manager.findOneBy(UserProfile, { user_id: userId });
+                if (profile) {
+                    profile.gems_balance = user.gems;
+                    profile.total_games_played = user.totalGames;
+                    profile.total_wins = user.totalWins;
+                    profile.level = user.level;
+                    profile.experience_points = user.experience;
+                    await manager.save(profile);
+                }
+            } catch (err) {}
+
             const history = manager.create(RewardHistory, {
                 user: user,
                 type: isWinner ? RewardType.GAME_WIN : RewardType.GAME_PARTICIPATION,
@@ -137,8 +174,19 @@ export class EnhancedRewardService {
     // ── Gem Purchases ─────────────────────────────────────────────
     static async processPurchase(userId: string, packageId: string, transactionId: string) {
         return await AppDataSource.transaction(async (manager) => {
+            console.log(`💎 [REWARD] Starting Fulfillment Process for User ${userId}`);
+            
             const user = await manager.findOneBy(User, { id: Number(userId) });
             if (!user) throw new Error("User not found");
+
+            // IDEMPOTENCY CHECK: Prevent duplicate gems if multiple processes hit this at once
+            if (transactionId) {
+                const existing = await manager.findOneBy(Purchase, { transaction_id: transactionId, status: "completed" });
+                if (existing) {
+                    console.warn(`🛑 [REWARD] Transaction ${transactionId} already fulfilled. Skipping.`);
+                    return { gemsAdded: 0, totalGems: user.gems };
+                }
+            }
 
             const pkg = await manager.findOneBy(GemPackage, { id: packageId });
             if (!pkg) throw new Error("Invalid gem package");
@@ -156,8 +204,30 @@ export class EnhancedRewardService {
             });
             await manager.save(purchase);
 
-            user.gems = (user.gems || 0) + totalGemsAdded;
+            const oldGems = user.gems || 0;
+            user.gems = oldGems + totalGemsAdded;
             await manager.save(user);
+
+            // SYNC TO USERPROFILE (Crucial for App Visibility)
+            try {
+                const { UserProfile } = await import("../../entities/UserProfile.js");
+                const profile = await manager.findOneBy(UserProfile, { user_id: userId });
+                if (profile) {
+                    profile.gems_balance = user.gems;
+                    await manager.save(profile);
+                    console.log(`✅ [SYNC] UserProfile synchronized! New Balance: ${user.gems}`);
+                } else {
+                    console.warn(`⚠️ [SYNC] UserProfile NOT FOUND for ${userId}. Creating one...`);
+                    const newProfile = manager.create(UserProfile, {
+                        user_id: userId,
+                        gems_balance: user.gems,
+                        display_name: user.fullName || user.username
+                    });
+                    await manager.save(newProfile);
+                }
+            } catch (err) {
+                console.error("🔥 [SYNC] UserProfile update failed:", err);
+            }
 
             const history = manager.create(RewardHistory, {
                 user: user,
@@ -167,6 +237,7 @@ export class EnhancedRewardService {
             });
             await manager.save(history);
 
+            console.log(`🎉 [SUCCESS] Gems Added! ${oldGems} -> ${user.gems}`);
             return { gemsAdded: totalGemsAdded, totalGems: user.gems };
         });
     }
