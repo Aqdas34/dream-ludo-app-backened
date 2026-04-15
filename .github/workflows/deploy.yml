@@ -3,7 +3,7 @@ name: Deploy Backend to VPS
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'ludo-game-backened/**'
 
@@ -22,7 +22,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ~/ludo-game-project/ludo-game-backened
-            git pull origin main
+            git pull origin master
             
             # 🚀 Automatically Inject Environment Variables from Secrets
             printf "%s" "${{ secrets.PROJECT_ENV }}" > .env
