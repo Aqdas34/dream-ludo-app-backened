@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { IsNull } from "typeorm";
 import { AppDataSource } from "../../data-source.js";
 import { User } from "../../entities/User.js";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import { Match } from "../../entities/Match.js";
 import { RewardHistory } from "../../entities/RewardHistory.js";
 import { Notification } from "../../entities/Notification.js";
@@ -11,6 +13,56 @@ import { Purchase } from "../../entities/Purchase.js";
 import { redis } from "../../config/redis.js";
 
 export class AdminController {
+    static async login(req: Request, res: Response) {
+        try {
+            const { username, password } = req.body;
+
+            if (!username || !password) {
+                return res.status(400).json({ success: 0, msg: "Username and password required" });
+            }
+
+            const userRepository = AppDataSource.getRepository(User);
+            const user = await userRepository.findOne({
+                where: [{ username }, { email: username }],
+                select: ["id", "username", "email", "fullName", "password", "isAdmin"]
+            });
+
+            if (!user) {
+                return res.status(401).json({ success: 0, msg: "Invalid credentials" });
+            }
+
+            const isPasswordValid = await bcrypt.compare(password, user.password);
+            if (!isPasswordValid) {
+                return res.status(401).json({ success: 0, msg: "Invalid credentials" });
+            }
+
+            if (!user.isAdmin) {
+                return res.status(403).json({ success: 0, msg: "User is not an admin" });
+            }
+
+            const token = jwt.sign(
+                { id: user.id, isAdmin: true },
+                process.env.JWT_SECRET || 'secret',
+                { expiresIn: '1d' }
+            );
+
+            return res.json({
+                success: 1,
+                msg: "Admin login successful",
+                result: [{
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                    fullName: user.fullName,
+                    token
+                }]
+            });
+        } catch (error) {
+            console.error("Admin login error:", error);
+            return res.status(500).json({ success: 0, msg: "Admin login failed" });
+        }
+    }
+
     static async getStats(req: Request, res: Response) {
         try {
             const userRepository = AppDataSource.getRepository(User);

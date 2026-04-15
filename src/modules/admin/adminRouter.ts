@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { AdminController } from "./adminController.js";
+import { adminAuthMiddleware } from "../../middleware/auth.js";
 
 const router = Router();
+
+router.post("/login", AdminController.login);
+router.use(adminAuthMiddleware);
 
 router.get("/stats", AdminController.getStats);
 router.get("/users", AdminController.getAllUsers);

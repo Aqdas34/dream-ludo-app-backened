@@ -42,3 +42,32 @@ export const authMiddleware = async (req: any, res: any, next: () => void) => {
         return next();
     }
 };
+
+export const adminAuthMiddleware = async (req: any, res: any, next: () => void) => {
+    try {
+        const rawToken = req.headers['authorization'];
+        if (!rawToken) {
+            return res.status(401).json({ success: 0, msg: "Admin token required" });
+        }
+
+        const token = String(rawToken).startsWith('Bearer ') ? rawToken.split(' ')[1] : rawToken;
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOneBy({ id: decoded.id });
+
+        if (!user) {
+            return res.status(401).json({ success: 0, msg: "Invalid token user" });
+        }
+
+        if (!user.isAdmin) {
+            return res.status(403).json({ success: 0, msg: "Admin access only" });
+        }
+
+        req.user = user;
+        req.userId = user.id.toString();
+        return next();
+    } catch (e) {
+        return res.status(401).json({ success: 0, msg: "Invalid or expired admin token" });
+    }
+};
