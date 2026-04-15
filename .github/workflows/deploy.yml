@@ -19,8 +19,16 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # 📂 Ensure project directory exists
+            mkdir -p ~/ludo-game-project/ludo-game-backened
             cd ~/ludo-game-project/ludo-game-backened
-            git pull origin master
+            
+            # 🐑 Clone if empty, otherwise pull
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/Aqdas34/dream-ludo-app-backened.git .
+            else
+              git pull origin master
+            fi
             
             # 🚀 Automatically Inject Environment Variables from Secrets
             printf "%s" "${{ secrets.PROJECT_ENV }}" > .env
