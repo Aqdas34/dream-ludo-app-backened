@@ -19,6 +19,8 @@ export class PaymentController {
             const host = req.get("host");
             const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
             const baseUrl = `${protocol}://${host}`;
+            const successUrl = process.env.PAYLINK_SUCCESS_URL || `${baseUrl}/api/payments/success`;
+            const cancelUrl = process.env.PAYLINK_CANCEL_URL || `${baseUrl}/api/payments/cancel`;
 
             const user = await userRepository.findOneBy({ id: Number(userId) });
             if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -46,8 +48,8 @@ export class PaymentController {
                 clientMobile: user.mobile || "0500000000", // Fallback if missing
                 clientName: user.fullName || user.username || "DreamLudo Player",
                 orderNumber: purchase.id, // Use local purchase UUID as order number
-                callBackUrl: `${baseUrl}/api/payments/success`,
-                cancelUrl: `${baseUrl}/api/payments/cancel`,
+                callBackUrl: successUrl,
+                cancelUrl: cancelUrl,
                 products: [{
                     title: pkg.name,
                     price: pkg.price,
@@ -70,8 +72,8 @@ export class PaymentController {
                     success: true, 
                     paymentUrl: invoiceResponse.url, 
                     transactionId: purchase.id,
-                    successUrl: `${baseUrl}/api/payments/success`,
-                    cancelUrl: `${baseUrl}/api/payments/cancel`
+                    successUrl: successUrl,
+                    cancelUrl: cancelUrl
                 });
             }
 
