@@ -312,13 +312,13 @@ export class AdminController {
             const { id } = req.params;
             const updateData = req.body;
             const packageRepo = AppDataSource.getRepository(GemPackage);
-            
+
             const pkg = await packageRepo.findOneBy({ id: id as string });
             if (!pkg) return res.status(404).json({ success: 0, msg: "Package not found" });
 
             Object.assign(pkg, updateData);
             await packageRepo.save(pkg);
-            
+
             return res.json({ success: 1, package: pkg });
         } catch (error) {
             return res.status(500).json({ success: 0, msg: "Failed to update gem package" });
@@ -358,7 +358,7 @@ export class AdminController {
             const { id } = req.params;
             const purchaseRepo = AppDataSource.getRepository(Purchase);
             const purchase = await purchaseRepo.findOneBy({ id: id as string });
-            
+
             if (!purchase) return res.status(404).json({ success: 0, msg: "Purchase not found" });
 
             await purchaseRepo.remove(purchase);
@@ -385,7 +385,7 @@ export class AdminController {
             // Check with Paylink API
             const invoiceId = purchase.invoice_id || purchase.id;
             console.log(`🏦 Manual Verification Triggered for Order: ${purchase.id}. Using ID: ${invoiceId}`);
-            
+
             const statusResponse = await PaylinkService.getInvoiceStatus(invoiceId);
             console.log(`🏦 Manual Check [${invoiceId}] Bank Status: ${statusResponse.orderStatus}`);
 
@@ -414,6 +414,67 @@ export class AdminController {
         } catch (error: any) {
             console.error("Manual verify error:", error.message);
             return res.status(500).json({ success: 0, msg: "Verification failed: " + error.message });
+        }
+    }
+
+    static async updateProfile(req: any, res: Response) {
+        try {
+            const { email, password } = req.body;
+            const userId = req.userId;
+
+            console.log(`🔐 Admin Profile Update Triggered for User ID: ${userId}`);
+            console.log(`📦 Incoming Data - Email: ${email}, Password: ${password ? '[REDACTED]' : 'Not Provided'}`);
+
+            if (!userId) {
+                console.error("❌ Profile Update Error: No User ID found in request. Auth middleware may have failed or token is missing.");
+                return res.status(401).json({ success: 0, msg: "Unauthorized access: Missing Identity" });
+            }
+
+            const userRepository = AppDataSource.getRepository(User);
+            // Specifically selecting password even if select:false is set if needed for verification,
+            // but for writing we just need the entity.
+            const user = await userRepository.findOneBy({ id: Number(userId) });
+
+            if (!user) {
+                console.error(`❌ Profile Update Error: User with ID ${userId} not found in database.`);
+                return res.status(404).json({ success: 0, msg: "Administrator record not found" });
+            }
+
+            if (email) {
+                console.log(`📧 Updating email from ${user.email} to ${email}`);
+                // Check if email is already taken by another user
+                const existingUser = await userRepository.findOne({ where: { email } });
+                if (existingUser && existingUser.id !== user.id) {
+                    console.error(`❌ Profile Update Error: Email ${email} is already in use by another user (ID: ${existingUser.id}).`);
+                    return res.status(400).json({ success: 0, msg: "Email already in use by another account" });
+                }
+                user.email = email;
+            }
+
+            if (password) {
+                console.log("🔑 Hashing new security password...");
+                user.password = await bcrypt.hash(password, 10);
+            }
+
+            await userRepository.save(user);
+            console.log("✅ Admin Profile updated successfully in database.");
+
+            return res.json({
+                success: 1,
+                msg: "Profile updated successfully",
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                    fullName: user.fullName
+                }
+            });
+        } catch (error: any) {
+            console.error("❌ CRITICAL: Admin Profile Update Error (Catch Block):", error);
+            return res.status(500).json({ 
+                success: 0, 
+                msg: "Internal server error: " + (error.message || "Unknown Error") 
+            });
         }
     }
 }

@@ -33,5 +33,6 @@ router.delete("/gem-packages/:id", AdminController.deleteGemPackage);
 
 router.delete("/purchases/:id", AdminController.deletePurchase);
 router.post("/verify-purchase/:id", AdminController.verifyPurchaseStatus);
+router.post("/update-profile", AdminController.updateProfile);
 
 export default router;

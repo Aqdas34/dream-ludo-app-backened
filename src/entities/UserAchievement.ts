@@ -12,15 +12,15 @@ export class UserAchievement {
     @JoinColumn({ name: "user_id" })
     user!: Relation<User>;
 
-    @Column()
-    user_id!: string;
+    @Column({ nullable: true })
+    user_id?: string;
 
     @ManyToOne(() => Achievement)
     @JoinColumn({ name: "achievement_id" })
     achievement!: Achievement;
 
-    @Column()
-    achievement_id!: string;
+    @Column({ nullable: true })
+    achievement_id?: string;
 
     @Column({ default: 0 })
     current_progress!: number;
