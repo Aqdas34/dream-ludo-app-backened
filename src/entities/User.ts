@@ -77,6 +77,9 @@ export class User {
     @Column({ default: false })
     isProfileCompleted!: boolean;
 
+    @Column({ default: false })
+    isVerified!: boolean;
+
     @CreateDateColumn()
     createdAt!: Date;
 

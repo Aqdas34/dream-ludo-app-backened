@@ -13,6 +13,7 @@ import { GemPackage } from "./entities/GemPackage.js";
 import { GameHistory } from "./entities/GameHistory.js";
 import { Notification } from "./entities/Notification.js";
 import { AdminOTP } from "./entities/AdminOTP.js";
+import { UserOTP } from "./entities/UserOTP.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -59,7 +60,8 @@ export const AppDataSource = new DataSource({
         GemPackage,
         GameHistory,
         Notification,
-        AdminOTP
+        AdminOTP,
+        UserOTP
     ],
     migrations: [],
     subscribers: [],

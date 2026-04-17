@@ -5,6 +5,10 @@ const router = Router();
 
 router.get("/get_user_login", AuthController.login);
 router.post("/post_user_register", AuthController.register);
+router.post("/register/verify", AuthController.verifyRegistrationOTP);
+router.post("/password/forgot", AuthController.requestForgotPassword);
+router.post("/password/reset", AuthController.resetPassword);
+
 router.get("/get_app_details", AuthController.getAppDetails);
 router.get("/get_profile", AuthController.getProfile);
 router.post("/update_profile", AuthController.updateProfile);
