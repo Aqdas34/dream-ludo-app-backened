@@ -22,13 +22,12 @@ export class EmailService {
      */
     static async sendOTP(to: string, otp: string) {
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'Dream Ludo Support'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+            from: `"${process.env.SMTP_FROM_NAME || 'Admin Support'}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
             to,
             subject: "Your Admin Password Security Code",
             html: `
                 <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
                     <div style="text-align: center; margin-bottom: 30px;">
-
                         <p style="color: #64748b; margin-top: 5px;">Admin Control Center</p>
                     </div>
                     
