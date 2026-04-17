@@ -5,6 +5,10 @@ import { adminAuthMiddleware } from "../../middleware/auth.js";
 const router = Router();
 
 router.post("/login", AdminController.login);
+router.post("/forgot-password", AdminController.requestForgotPassword);
+router.post("/verify-otp", AdminController.verifyOTP);
+router.post("/reset-password", AdminController.resetPassword);
+
 router.use(adminAuthMiddleware);
 
 router.get("/stats", AdminController.getStats);

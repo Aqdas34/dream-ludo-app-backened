@@ -12,6 +12,7 @@ import { GameReward } from "./entities/GameReward.js";
 import { GemPackage } from "./entities/GemPackage.js";
 import { GameHistory } from "./entities/GameHistory.js";
 import { Notification } from "./entities/Notification.js";
+import { AdminOTP } from "./entities/AdminOTP.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -57,7 +58,8 @@ export const AppDataSource = new DataSource({
         GameReward,
         GemPackage,
         GameHistory,
-        Notification
+        Notification,
+        AdminOTP
     ],
     migrations: [],
     subscribers: [],

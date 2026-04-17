@@ -10,6 +10,8 @@ import { Notification } from "../../entities/Notification.js";
 import { Achievement } from "../../entities/Achievement.js";
 import { GemPackage } from "../../entities/GemPackage.js";
 import { Purchase } from "../../entities/Purchase.js";
+import { AdminOTP } from "../../entities/AdminOTP.js";
+import { EmailService } from "../../utils/emailService.js";
 import { redis } from "../../config/redis.js";
 
 export class AdminController {
@@ -475,6 +477,134 @@ export class AdminController {
                 success: 0, 
                 msg: "Internal server error: " + (error.message || "Unknown Error") 
             });
+        }
+    }
+
+    static async requestForgotPassword(req: Request, res: Response) {
+        try {
+            const { email } = req.body;
+            console.log(`🔍 Password Recovery Request for: ${email}`);
+
+            if (!email) {
+                return res.status(400).json({ success: 0, msg: "Email address is required" });
+            }
+
+            const userRepository = AppDataSource.getRepository(User);
+            const admin = await userRepository.findOne({
+                where: { email, isAdmin: true }
+            });
+
+            if (!admin) {
+                console.warn(`⚠️ Blocked recovery attempt for non-admin or invalid email: ${email}`);
+                // Return generic success to prevent email enumeration attacks, 
+                // but for admin dashboards, we usually want clear feedback.
+                return res.status(404).json({ success: 0, msg: "No administrator account found with this email" });
+            }
+
+            // Generate 6-digit OTP
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+            const otpRepository = AppDataSource.getRepository(AdminOTP);
+            
+            // Delete any existing OTPs for this email to prevent spam/clutter
+            await otpRepository.delete({ email });
+
+            const otpEntry = otpRepository.create({
+                email,
+                otp,
+                expiresAt
+            });
+
+            await otpRepository.save(otpEntry);
+            console.log(`🔢 OTP Generated for ${email}: ${otp} (Expires at ${expiresAt.toLocaleTimeString()})`);
+
+            // Send Email
+            await EmailService.sendOTP(email, otp);
+
+            return res.json({ 
+                success: 1, 
+                msg: "Security code sent to your email. Please check your inbox (and spam folder)." 
+            });
+
+        } catch (error: any) {
+            console.error("❌ Reset Password OTP Error:", error);
+            return res.status(500).json({ success: 0, msg: "Internal server error: " + error.message });
+        }
+    }
+
+    static async verifyOTP(req: Request, res: Response) {
+        try {
+            const { email, otp } = req.body;
+
+            if (!email || !otp) {
+                return res.status(400).json({ success: 0, msg: "Email and OTP are required" });
+            }
+
+            const otpRepository = AppDataSource.getRepository(AdminOTP);
+            const validOTP = await otpRepository.findOne({
+                where: { email, otp }
+            });
+
+            if (!validOTP) {
+                return res.status(400).json({ success: 0, msg: "Invalid verification code" });
+            }
+
+            if (new Date() > validOTP.expiresAt) {
+                await otpRepository.delete({ email });
+                return res.status(400).json({ success: 0, msg: "Verification code has expired. Please request a new one." });
+            }
+
+            return res.json({ success: 1, msg: "Code verified successfully" });
+
+        } catch (error: any) {
+            return res.status(500).json({ success: 0, msg: error.message });
+        }
+    }
+
+    static async resetPassword(req: Request, res: Response) {
+        try {
+            const { email, otp, password } = req.body;
+
+            if (!email || !otp || !password) {
+                return res.status(400).json({ success: 0, msg: "Full reset data is required" });
+            }
+
+            const otpRepository = AppDataSource.getRepository(AdminOTP);
+            const validOTP = await otpRepository.findOne({
+                where: { email, otp }
+            });
+
+            if (!validOTP || (new Date() > validOTP.expiresAt)) {
+                return res.status(400).json({ success: 0, msg: "Security session expired or invalid" });
+            }
+
+            const userRepository = AppDataSource.getRepository(User);
+            const admin = await userRepository.findOne({
+                where: { email, isAdmin: true }
+            });
+
+            if (!admin) {
+                return res.status(404).json({ success: 0, msg: "Account association lost" });
+            }
+
+            // Update Password
+            admin.password = await bcrypt.hash(password, 10);
+            await userRepository.save(admin);
+
+            // Cleanup OTP
+            await otpRepository.delete({ email });
+
+            console.log(`✅ Admin Password Reset Complete for: ${email}`);
+
+            return res.json({ 
+                success: 1, 
+                msg: "Password reset successful! You can now log in with your new credentials." 
+            });
+
+        } catch (error: any) {
+            console.error("❌ Password Reset Finalization Error:", error);
+            return res.status(500).json({ success: 0, msg: error.message });
         }
     }
 }
