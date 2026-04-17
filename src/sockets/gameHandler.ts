@@ -71,7 +71,9 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                     username,
                     color: PieceColor.RED,
                     pieces: [0, 0, 0, 0],
-                    isReady: true
+                    isReady: true,
+                    extraRollsUsed: 0,
+                    skipTurnsUsed: 0
                 }],
                 status: GameStatus.WAITING,
                 turn: 0,
@@ -152,7 +154,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             const assignedColor = colors[roomState.players.length];
 
             roomState.players.push({
-                userId, username, color: assignedColor, pieces: [0, 0, 0, 0], isReady: true
+                userId, username, color: assignedColor, pieces: [0, 0, 0, 0], isReady: true, extraRollsUsed: 0, skipTurnsUsed: 0
             });
 
             await redis.set(`room:${roomId}`, JSON.stringify(roomState), { EX: 3600 });
@@ -322,6 +324,76 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             }
         } catch (error) {
             console.error("Error moving piece:", error);
+        }
+    });
+
+    // ── Ability: Extra Roll ───────────────────────────────────────
+    socket.on("useExtraRoll", async (data: { roomId: string }) => {
+        try {
+            const roomData = await redis.get(`room:${data.roomId}`);
+            if (!roomData) return;
+            const roomState: RoomState = JSON.parse(roomData);
+            if (roomState.status !== GameStatus.PLAYING) return;
+
+            const userId = (socket as any).userId;
+            const playerIdx = roomState.turn % roomState.players.length;
+            const player = roomState.players[playerIdx];
+
+            if (player.userId !== userId) return;
+            if (!roomState.hasRolled) return socket.emit("error", "You haven't rolled yet!");
+            if (player.extraRollsUsed >= 3) return socket.emit("error", "Max 3 extra rolls per game reached");
+
+            // Deduct Gem
+            try {
+                await RewardService.deductGems(Number(userId), 1, "Game Ability: Extra Roll");
+            } catch (e: any) {
+                return socket.emit("error", e.message || "Insufficient Gems");
+            }
+
+            // Grant Extra Roll
+            player.extraRollsUsed += 1;
+            roomState.hasRolled = false; // Allow rolling again
+            
+            await redis.set(`room:${data.roomId}`, JSON.stringify(roomState), { EX: 3600 });
+            io.to(data.roomId).emit("abilityUsed", { userId, type: 'EXTRA_ROLL', balance: player.extraRollsUsed });
+            io.to(data.roomId).emit("roomUpdated", roomState);
+        } catch (error) {
+            console.error("Error using extra roll:", error);
+        }
+    });
+
+    // ── Ability: Skip Turn ────────────────────────────────────────
+    socket.on("useSkipTurn", async (data: { roomId: string }) => {
+        try {
+            const roomData = await redis.get(`room:${data.roomId}`);
+            if (!roomData) return;
+            const roomState: RoomState = JSON.parse(roomData);
+            if (roomState.status !== GameStatus.PLAYING) return;
+
+            const userId = (socket as any).userId;
+            const player = roomState.players.find(p => p.userId === userId);
+            if (!player) return;
+
+            if (player.skipTurnsUsed >= 1) return socket.emit("error", "Max 1 skip turn per game reached");
+
+            // Deduct Gems
+            try {
+                await RewardService.deductGems(Number(userId), 10, "Game Ability: Skip Turn");
+            } catch (e: any) {
+                return socket.emit("error", e.message || "Insufficient Gems");
+            }
+
+            // Execute Skip
+            player.skipTurnsUsed += 1;
+            roomState.turn = (roomState.turn + 1) % roomState.players.length;
+            roomState.hasRolled = false;
+            roomState.isRolling = false;
+
+            await redis.set(`room:${data.roomId}`, JSON.stringify(roomState), { EX: 3600 });
+            io.to(data.roomId).emit("abilityUsed", { userId, type: 'SKIP_TURN', balance: player.skipTurnsUsed });
+            io.to(data.roomId).emit("roomUpdated", roomState);
+        } catch (error) {
+            console.error("Error using skip turn:", error);
         }
     });
 

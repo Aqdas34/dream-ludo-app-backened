@@ -17,6 +17,8 @@ export interface Player {
     color: PieceColor;
     pieces: number[]; // positions 0..56 (0 means home base, 57 means finish)
     isReady: boolean;
+    extraRollsUsed: number;
+    skipTurnsUsed: number;
 }
 
 export interface ChatMessage {

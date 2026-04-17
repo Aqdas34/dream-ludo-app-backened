@@ -126,4 +126,35 @@ export class RewardService {
             }
         });
     }
+
+    // ── Ability Deduction ─────────────────────────────────────────
+    static async deductGems(userId: number, amount: number, description: string) {
+        return await AppDataSource.transaction(async (manager) => {
+            const user = await manager.findOneBy(User, { id: userId });
+            if (!user) throw new Error("User not found");
+            if ((user.gems || 0) < amount) throw new Error("Insufficient Gems");
+
+            user.gems -= amount;
+            await manager.save(user);
+
+            // Sync to UserProfile
+            try {
+                const { UserProfile } = await import("../../entities/UserProfile.js");
+                const profile = await manager.findOneBy(UserProfile, { user_id: userId.toString() });
+                if (profile) {
+                    profile.gems_balance = user.gems;
+                    await manager.save(profile);
+                }
+            } catch (err) { }
+
+            const history = new RewardHistory();
+            history.user = user;
+            history.amount = -amount;
+            history.type = RewardType.DAILY_LOGIN; // Reuse or add new RewardType.ABILITY_USE
+            history.description = description;
+            await manager.save(history);
+
+            return user.gems;
+        });
+    }
 }

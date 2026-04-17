@@ -17,11 +17,15 @@ export class AuthController {
         const userRepository = AppDataSource.getRepository(User);
         const user = await userRepository.findOne({
             where: [{ username: username as string }, { email: username as string }],
-            select: ["id", "username", "email", "password", "fullName", "mobile", "depositBal", "wonBal", "bonusBal", "isAdmin", "isProfileCompleted", "gems", "gender"]
+            select: ["id", "username", "email", "password", "fullName", "mobile", "countryCode", "profileImg", "depositBal", "wonBal", "bonusBal", "isAdmin", "isProfileCompleted", "isVerified", "isBanned", "gems", "gender"]
         });
 
         if (!user) {
             return res.json({ success: 0, msg: "User not found" });
+        }
+
+        if (user.isBanned) {
+            return res.json({ success: 0, msg: "Your account has been banned. Please contact support." });
         }
 
         if (!user.isVerified) {
