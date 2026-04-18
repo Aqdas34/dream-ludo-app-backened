@@ -95,14 +95,16 @@ export class AuthController {
 
             const userRepository = AppDataSource.getRepository(User);
 
-            // Check if user exists
-            const existing = await userRepository.findOne({
-                where: [{ username }, { email }]
-            });
+            const existingUser = await userRepository.findOneBy({ username });
+            if (existingUser) {
+                console.log(`❌ Registration failed: Username exists (${username})`);
+                return res.json({ success: 0, msg: "This username is already taken" });
+            }
 
-            if (existing) {
-                console.log(`❌ Registration failed: User exists (User: ${username}, Email: ${email})`);
-                return res.json({ success: 0, msg: "User already exists with this username or email" });
+            const existingEmail = await userRepository.findOneBy({ email });
+            if (existingEmail) {
+                console.log(`❌ Registration failed: Email exists (${email})`);
+                return res.json({ success: 0, msg: "This email address is already registered" });
             }
 
             const hashedPassword = await bcrypt.hash(password, 10);
@@ -162,7 +164,8 @@ export class AuthController {
                 id: user.id,
                 username: user.username,
                 email: user.email,
-                fullName: user.fullName
+                fullName: user.fullName,
+                isVerified: user.isVerified
             };
 
             return res.json({
