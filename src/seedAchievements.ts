@@ -13,7 +13,7 @@ async function seedAchievements() {
     const achievements = [
         {
             achievement_key: "welcome",
-            name: "Welcome to Dream Ludo",
+            name: "Welcome to XLudo",
             description: "Thanks for joining us! Here's a small gift to start.",
             category: "special",
             reward_gems: 50,

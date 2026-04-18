@@ -46,7 +46,7 @@ export class PaymentController {
             const invoiceResponse = await PaylinkService.createInvoice({
                 amount: pkg.price,
                 clientMobile: user.mobile || "0500000000", // Fallback if missing
-                clientName: user.fullName || user.username || "DreamLudo Player",
+                clientName: user.fullName || user.username || "XLudo Player",
                 orderNumber: purchase.id, // Use local purchase UUID as order number
                 callBackUrl: successUrl,
                 cancelUrl: cancelUrl,
@@ -281,7 +281,7 @@ export class PaymentController {
       }
     }
 
-    const intentUrl = "intent://payment/success#Intent;scheme=xludo;package=com.dreamludo.app;end";
+    const intentUrl = "intent://payment/success#Intent;scheme=xludo;package=com.xludo.app;end";
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -393,7 +393,7 @@ export class PaymentController {
   }
 
     public static async handleCancel(req: Request, res: Response) {
-        const intentUrl = "intent://payment/cancel#Intent;scheme=xludo;package=com.dreamludo.app;end";
+        const intentUrl = "intent://payment/cancel#Intent;scheme=xludo;package=com.xludo.app;end";
         res.send(`
           <!DOCTYPE html>
           <html>

@@ -11,7 +11,7 @@ async function seedAdmin() {
         const userRepository = AppDataSource.getRepository(User);
         
         const username = "ludo_admin";
-        const email = "admin@dreamludo.com";
+        const email = "admin@xludo.com";
         const password = "B9qp63RLyLf70iEQw3";
         const fullName = "Local Administrator";
 
