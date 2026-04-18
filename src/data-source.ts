@@ -14,6 +14,7 @@ import { GameHistory } from "./entities/GameHistory.js";
 import { Notification } from "./entities/Notification.js";
 import { AdminOTP } from "./entities/AdminOTP.js";
 import { UserOTP } from "./entities/UserOTP.js";
+import { AuditLog } from "./entities/AuditLog.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -61,7 +62,8 @@ export const AppDataSource = new DataSource({
         GameHistory,
         Notification,
         AdminOTP,
-        UserOTP
+        UserOTP,
+        AuditLog
     ],
     migrations: [],
     subscribers: [],

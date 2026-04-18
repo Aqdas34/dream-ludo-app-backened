@@ -12,7 +12,6 @@ import { initSocket } from "./config/socket.js";
 import authRouter from "./modules/auth/authRouter.js";
 import matchRouter from "./modules/match/matchRouter.js";
 import rewardRouter from "./modules/rewards/rewardRouter.js";
-import adminRouter from "./modules/admin/adminRouter.js";
 import leaderboardRouter from "./modules/leaderboard/leaderboardRouter.js";
 import paymentRouter from "./modules/payments/paymentRouter.js";
 
@@ -36,15 +35,11 @@ app.use(express.urlencoded({ extended: true }));
 // Request Logging Middleware
 app.use((req: any, res, next) => {
     console.log(`[${req.method}] ${req.path} - Content-Type: ${req.headers['content-type']}`);
-    if (req.rawBody) {
-        // console.log(`📦 Raw Body: ${req.rawBody.substring(0, 100)}...`);
-    }
     req.body = req.body || {};
     next();
 });
 
-// Main API Routes
-app.use("/api/admin", adminRouter);
+// Main API Routes (except admin which is loaded after DB)
 app.use("/api", authRouter);
 app.use("/api", matchRouter);
 app.use("/api", rewardRouter);
@@ -66,6 +61,12 @@ AppDataSource.initialize()
     .then(async () => {
         console.log("🚀 Database Initialized");
 
+        // Dynamically import the admin router only after the DB is ready 
+        // to prevent circular dependency loops during startup
+        const { default: adminRouter } = await import("./modules/admin/adminRouter.js");
+        app.use("/api/admin", adminRouter);
+        console.log("🛡️ Admin Routes Integrated");
+
         // Set up socket handlers
         setupSockets(io);
 
@@ -79,6 +80,9 @@ AppDataSource.initialize()
 
 process.on('uncaughtException', (error) => {
     console.error('🔥 UNCAUGHT EXCEPTION:', error);
+    if (error && (error as any).stack) {
+        console.error('📜 Stack Trace:', (error as any).stack);
+    }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
