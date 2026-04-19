@@ -36,9 +36,14 @@ export class PaylinkService {
 
         try {
             const response = await axios.post(`${API_BASE}/api/auth`, {
-                persistToken: false,
                 apiId: APP_ID,
-                secretKey: SECRET_KEY
+                secretKey: SECRET_KEY,
+                persistToken: "false" // String as per documentation example
+            }, {
+                headers: {
+                    "accept": "application/json",
+                    "Content-Type": "application/json"
+                }
             });
 
             if (response.data && response.data.id_token) {
@@ -61,6 +66,7 @@ export class PaylinkService {
             const response = await axios.post(`${API_BASE}/api/addInvoice`, data, {
                 headers: {
                     Authorization: `Bearer ${token}`,
+                    "accept": "application/json",
                     "Content-Type": "application/json"
                 }
             });
