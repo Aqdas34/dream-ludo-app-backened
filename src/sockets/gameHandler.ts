@@ -74,7 +74,8 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                     isReady: true,
                     extraRollsUsed: 0,
                     skipTurnsUsed: 0,
-                    consecutiveSixes: 0
+                    consecutiveSixes: 0,
+                    turnSnapshot: [0, 0, 0, 0]
                 }],
                 status: GameStatus.WAITING,
                 turn: 0,
@@ -155,7 +156,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             const assignedColor = colors[roomState.players.length];
 
             roomState.players.push({
-                userId, username, color: assignedColor, pieces: [0, 0, 0, 0], isReady: true, extraRollsUsed: 0, skipTurnsUsed: 0, consecutiveSixes: 0
+                userId, username, color: assignedColor, pieces: [0, 0, 0, 0], isReady: true, extraRollsUsed: 0, skipTurnsUsed: 0, consecutiveSixes: 0, turnSnapshot: [0, 0, 0, 0]
             });
 
             await redis.set(`room:${roomId}`, JSON.stringify(roomState), { EX: 3600 });
@@ -264,22 +265,34 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                 const pIdx = rState.turn % rState.players.length;
                 const player = rState.players[pIdx];
 
-                // ── Three 6s Rule ─────────────────────────────────────
+                // ── Three 6s Rule with Reversal ─────────────────────────
                 if (roll === 6) {
-                    player.consecutiveSixes += 1;
+                    // Capture snapshot at the very beginning of the turn
+                    if (player.consecutiveSixes === 0) {
+                        player.turnSnapshot = [...player.pieces];
+                    }
+
+                    player.consecutiveSixes++;
+
+                    if (player.consecutiveSixes >= 3) {
+                        // REVERSE MOVES: Restore pieces to pre-turn state
+                        if (player.turnSnapshot) {
+                            player.pieces = [...player.turnSnapshot];
+                        }
+                        
+                        player.consecutiveSixes = 0;
+                        rState.turn = (rState.turn + 1) % rState.players.length;
+                        rState.hasRolled = false;
+                        
+                        await redis.set(`room:${roomId}`, JSON.stringify(rState), { EX: 3600 });
+                        io.to(roomId).emit("gameMessage", { 
+                            message: `${player.username} rolled three 6s! ALL moves this turn reversed and turn skipped.` 
+                        });
+                        io.to(roomId).emit("roomUpdated", rState);
+                        return;
+                    }
                 } else {
                     player.consecutiveSixes = 0;
-                }
-
-                if (player.consecutiveSixes === 3) {
-                    player.consecutiveSixes = 0;
-                    rState.hasRolled = false;
-                    rState.turn = (rState.turn + 1) % rState.players.length;
-                    
-                    await redis.set(`room:${roomId}`, JSON.stringify(rState), { EX: 3600 });
-                    io.to(roomId).emit("gameMessage", { message: `${player.username} rolled three 6s! Turn skipped.` });
-                    io.to(roomId).emit("roomUpdated", rState);
-                    return;
                 }
 
                 // Check if player can move ANY piece

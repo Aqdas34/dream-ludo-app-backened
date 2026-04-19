@@ -20,6 +20,7 @@ export interface Player {
     extraRollsUsed: number;
     skipTurnsUsed: number;
     consecutiveSixes: number; // Added to track three-6s rule
+    turnSnapshot: number[]; // Store pieces at start of turn
 }
 
 export interface ChatMessage {
