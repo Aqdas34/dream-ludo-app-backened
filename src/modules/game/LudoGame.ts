@@ -19,6 +19,7 @@ export interface Player {
     isReady: boolean;
     extraRollsUsed: number;
     skipTurnsUsed: number;
+    consecutiveSixes: number; // Added to track three-6s rule
 }
 
 export interface ChatMessage {
@@ -48,14 +49,25 @@ export class LudoEngine {
     // Basic constants
     static MAX_STEPS = 57;
 
-    static getStartingPosition(color: PieceColor): number {
+    static getGlobalPosition(color: PieceColor, step: number): number | null {
+        if (step === 0 || step > 51) return null; // In base or home stretch
+        
+        let startPos = 0;
         switch (color) {
-            case PieceColor.RED: return 1;
-            case PieceColor.GREEN: return 14;
-            case PieceColor.YELLOW: return 27;
-            case PieceColor.BLUE: return 40;
-            default: return 1;
+            case PieceColor.RED: startPos = 1; break;
+            case PieceColor.GREEN: startPos = 14; break;
+            case PieceColor.YELLOW: startPos = 27; break;
+            case PieceColor.BLUE: startPos = 40; break;
         }
+        
+        // Global board is 1-52
+        let pos = (startPos + step - 2) % 52 + 1;
+        return pos;
+    }
+
+    static isSafeSquare(globalPos: number): boolean {
+        const safeSquares = [1, 9, 14, 22, 27, 35, 40, 48];
+        return safeSquares.includes(globalPos);
     }
 
     static canMove(player: Player, pieceIndex: number, diceValue: number): boolean {
@@ -90,10 +102,26 @@ export class LudoEngine {
             }
         }
 
-        // Logic check for hitting other pieces
-        // For simplicity, we compare global board positions
-        // This would require a conversion from local step (1-57) to global coordinate (1-52)
-        // Skipping complex collision for now to ensure basic movement works
+        // Collision Detection
+        const newStep = player.pieces[pieceIndex];
+        const globalPos = this.getGlobalPosition(player.color, newStep);
+
+        if (globalPos !== null && !this.isSafeSquare(globalPos)) {
+            for (let i = 0; i < room.players.length; i++) {
+                if (i === room.turn) continue; // Skip current player
+                
+                const opponent = room.players[i];
+                for (let j = 0; j < opponent.pieces.length; j++) {
+                    const oppStep = opponent.pieces[j];
+                    const oppGlobalPos = this.getGlobalPosition(opponent.color, oppStep);
+                    
+                    if (oppGlobalPos === globalPos) {
+                        opponent.pieces[j] = 0; // Send back to base
+                        hit = true;
+                    }
+                }
+            }
+        }
 
         return { hit, finished };
     }

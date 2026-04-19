@@ -73,7 +73,8 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                     pieces: [0, 0, 0, 0],
                     isReady: true,
                     extraRollsUsed: 0,
-                    skipTurnsUsed: 0
+                    skipTurnsUsed: 0,
+                    consecutiveSixes: 0
                 }],
                 status: GameStatus.WAITING,
                 turn: 0,
@@ -154,7 +155,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             const assignedColor = colors[roomState.players.length];
 
             roomState.players.push({
-                userId, username, color: assignedColor, pieces: [0, 0, 0, 0], isReady: true, extraRollsUsed: 0, skipTurnsUsed: 0
+                userId, username, color: assignedColor, pieces: [0, 0, 0, 0], isReady: true, extraRollsUsed: 0, skipTurnsUsed: 0, consecutiveSixes: 0
             });
 
             await redis.set(`room:${roomId}`, JSON.stringify(roomState), { EX: 3600 });
@@ -260,11 +261,31 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                 rState.isRolling = false;
                 rState.hasRolled = true;
 
+                const pIdx = rState.turn % rState.players.length;
+                const player = rState.players[pIdx];
+
+                // ── Three 6s Rule ─────────────────────────────────────
+                if (roll === 6) {
+                    player.consecutiveSixes += 1;
+                } else {
+                    player.consecutiveSixes = 0;
+                }
+
+                if (player.consecutiveSixes === 3) {
+                    player.consecutiveSixes = 0;
+                    rState.hasRolled = false;
+                    rState.turn = (rState.turn + 1) % rState.players.length;
+                    
+                    await redis.set(`room:${roomId}`, JSON.stringify(rState), { EX: 3600 });
+                    io.to(roomId).emit("gameMessage", { message: `${player.username} rolled three 6s! Turn skipped.` });
+                    io.to(roomId).emit("roomUpdated", rState);
+                    return;
+                }
+
                 // Check if player can move ANY piece
-                const player = rState.players[rState.turn % rState.players.length];
                 const canMoveAny = player.pieces.some((_, idx) => LudoEngine.canMove(player, idx, roll));
 
-                if (!canMoveAny) {
+                if (!canMoveAny && roll !== 6) {
                     // Pass turn after 1.5s delay
                     setTimeout(async () => {
                         const rData = await redis.get(`room:${roomId}`);
@@ -272,6 +293,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                         const rs: RoomState = JSON.parse(rData);
                         rs.turn = (rs.turn + 1) % rs.players.length;
                         rs.hasRolled = false;
+                        rs.players[rs.turn % rs.players.length].consecutiveSixes = 0; // Reset next player
                         await redis.set(`room:${roomId}`, JSON.stringify(rs), { EX: 3600 });
                         io.to(roomId).emit("roomUpdated", rs);
                     }, 1500);
@@ -301,7 +323,7 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
             if (player.userId !== userId) return;
 
             if (LudoEngine.canMove(player, data.pieceIndex, roomState.diceValue)) {
-                LudoEngine.movePiece(roomState, data.pieceIndex);
+                const moveResult = LudoEngine.movePiece(roomState, data.pieceIndex);
 
                 if (LudoEngine.checkWinner(roomState)) {
                     roomState.status = GameStatus.FINISHED;
@@ -312,10 +334,23 @@ export const setupGameHandlers = (io: Server, socket: Socket) => {
                         await RewardService.updateGameRewards(Number(player.userId), true);
                     } catch (e) { }
                 } else {
-                    // Turn passes unless it was a 6
-                    if (roomState.diceValue !== 6) {
+                    // Turn logic: Extra turn if:
+                    // 1. Rolled a 6
+                    // 2. Hit an opponent (hit)
+                    // 3. Reached home (finished)
+                    const bonusTurn = (roomState.diceValue === 6 || moveResult.hit || moveResult.finished);
+
+                    if (!bonusTurn) {
                         roomState.turn = (roomState.turn + 1) % roomState.players.length;
+                        player.consecutiveSixes = 0; // Reset on turn end
+                    } else {
+                        if (moveResult.hit) {
+                            io.to(data.roomId).emit("gameMessage", { message: `${player.username} captured a token! Extra turn.` });
+                        } else if (moveResult.finished) {
+                            io.to(data.roomId).emit("gameMessage", { message: `${player.username} reached home! Extra turn.` });
+                        }
                     }
+                    
                     roomState.hasRolled = false;
                 }
 
