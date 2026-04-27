@@ -73,8 +73,12 @@ export class PaylinkService {
 
             return response.data; // contains url, transactionId
         } catch (error: any) {
-            console.error("Paylink Add Invoice Error:", error.response?.data || error.message);
-            throw new Error("Failed to create Paylink invoice");
+            const paylinkError = error.response?.data;
+            console.error("Paylink Add Invoice Error:", paylinkError || error.message);
+            
+            // Extract the specific Arabic/English message from Paylink if it exists
+            const detail = paylinkError?.detail || paylinkError?.title || "Failed to create Paylink invoice";
+            throw new Error(detail);
         }
     }
 
