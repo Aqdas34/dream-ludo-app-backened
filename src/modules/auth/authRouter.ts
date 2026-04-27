@@ -15,5 +15,6 @@ router.post("/password/reset", strictSecurityLimiter, AuthController.resetPasswo
 router.get("/get_app_details", AuthController.getAppDetails);
 router.get("/get_profile", AuthController.getProfile);
 router.post("/update_profile", AuthController.updateProfile);
+router.delete("/delete_account", AuthController.deleteAccount);
 
 export default router;

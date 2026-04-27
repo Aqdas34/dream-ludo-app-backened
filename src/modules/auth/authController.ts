@@ -5,6 +5,13 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { UserOTP } from "../../entities/UserOTP.js";
 import { EmailService } from "../../utils/emailService.js";
+import { RewardHistory } from "../../entities/RewardHistory.js";
+import { GemTransaction } from "../../entities/GemTransaction.js";
+import { Notification } from "../../entities/Notification.js";
+import { Purchase } from "../../entities/Purchase.js";
+import { UserAchievement } from "../../entities/UserAchievement.js";
+import { GameHistory } from "../../entities/GameHistory.js";
+import { UserProfile } from "../../entities/UserProfile.js";
 
 export class AuthController {
     static async login(req: Request, res: Response) {
@@ -319,5 +326,75 @@ export class AuthController {
                 update_mandatory: 0
             }]
         });
+    }
+
+    static async deleteAccount(req: Request, res: Response) {
+        const queryRunner = AppDataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+            const userId = req.body.userId || (req as any).user?.id;
+            if (!userId) {
+                return res.status(400).json({ success: 0, msg: "User ID missing" });
+            }
+
+            const userRepo = queryRunner.manager.getRepository(User);
+            const user = await userRepo.findOne({ where: { id: Number(userId) } });
+
+            if (!user) {
+                await queryRunner.rollbackTransaction();
+                return res.status(404).json({ success: 0, msg: "User not found" });
+            }
+
+            const email = user.email;
+
+            // Delete related records manually where cascade is not set
+            // 1. OTPs
+            await queryRunner.manager.getRepository(UserOTP).delete({ email });
+            
+            // 2. Reward History
+            await queryRunner.manager.getRepository(RewardHistory).delete({ user: user.id } as any);
+            
+            // 3. Gem Transactions (linked to UserProfile via user_id string)
+            await queryRunner.manager.getRepository(GemTransaction).delete({ user_id: user.id.toString() } as any);
+            
+            // 4. Notifications
+            await queryRunner.manager.getRepository(Notification).delete({ user: { id: user.id } } as any);
+            
+            // 5. Purchases (linked to UserProfile via user_id string)
+            await queryRunner.manager.getRepository(Purchase).delete({ user_id: user.id.toString() } as any);
+            
+            // 6. Achievements (linked to User via user_id string)
+            await queryRunner.manager.getRepository(UserAchievement).delete({ user_id: user.id.toString() } as any);
+            
+            // 7. Game History (linked via userId string)
+            await queryRunner.manager.getRepository(GameHistory).delete({ userId: user.id.toString() } as any);
+
+            // 8. User Profile
+            await queryRunner.manager.getRepository(UserProfile).delete({ user_id: user.id.toString() });
+
+            // Finally delete the user
+            await userRepo.delete(user.id);
+
+            await queryRunner.commitTransaction();
+            console.log(`🗑️ Account deleted for user: ${user.username} (${email})`);
+
+            return res.json({ 
+                success: 1, 
+                msg: "Your account and all related data have been permanently deleted." 
+            });
+
+        } catch (error: any) {
+            await queryRunner.rollbackTransaction();
+            console.error("🔥 Account deletion error:", error);
+            return res.status(500).json({ 
+                success: 0, 
+                msg: "Failed to delete account. Please try again later.",
+                error: error.message 
+            });
+        } finally {
+            await queryRunner.release();
+        }
     }
 }
